@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Jupyter
+*.nbconvert.ipynb
+profile_default/
+ipython_config.py
+
+# MERSCOPE / large data (keep raw Vizgen output out of git)
+*.tif
+*.tiff
+*.hdf5
+*.h5
+*.loom
+detected_transcripts*.csv
+cell_by_gene*.csv
+cell_metadata*.csv
+barcodes*.csv
+data/
+raw/
+
+# Env / secrets
+.env
+*.local
