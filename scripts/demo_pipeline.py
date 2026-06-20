@@ -8,8 +8,8 @@ real, computed figures. The data is simulated and clearly labelled as such; only
 the pipeline and plots are "real".
 
 Usage:
-    pip install scanpy leidenalg igraph seaborn
-    python scripts/demo_pipeline.py     # -> assets/demo_pipeline.png
+    pip install scanpy squidpy leidenalg igraph seaborn
+    python scripts/demo_pipeline.py     # -> assets/demo_pipeline.png (+ squidpy fig)
 """
 
 from pathlib import Path
@@ -108,3 +108,25 @@ ax0.legend(title="Leiden", fontsize=9, title_fontsize=10, loc="upper right",
 out = Path(__file__).resolve().parent.parent / "assets" / "demo_pipeline.png"
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
 print(f"wrote {out}")
+
+# --- 4. Modern extension: spatial neighborhood enrichment (squidpy) ----------
+# Plain Scanpy clusters in expression space; squidpy adds spatial-aware analysis.
+try:
+    import squidpy as sq
+except ImportError:
+    print("squidpy not installed — skipping spatial neighborhood figure "
+          "(pip install squidpy)")
+else:
+    ad.obs["leiden"] = ad.obs["leiden"].astype("category")
+    sq.gr.spatial_neighbors(ad, coord_type="generic", n_neighs=6)
+    sq.gr.nhood_enrichment(ad, cluster_key="leiden", seed=0, show_progress_bar=False)
+    z = ad.uns["leiden_nhood_enrichment"]["zscore"]
+    fig2, ax = plt.subplots(figsize=(6.4, 5.2))
+    sns.heatmap(z, cmap="RdBu_r", center=0, square=True, linewidths=1,
+                linecolor="white", xticklabels=cats, yticklabels=cats,
+                cbar_kws={"label": "neighborhood enrichment (z)"}, ax=ax)
+    ax.set(title="Spatial neighborhood enrichment (squidpy)",
+           xlabel="Leiden cluster", ylabel="Leiden cluster")
+    out2 = Path(__file__).resolve().parent.parent / "assets" / "demo_spatial_squidpy.png"
+    fig2.savefig(out2, dpi=150, bbox_inches="tight", facecolor="white")
+    print(f"wrote {out2}")

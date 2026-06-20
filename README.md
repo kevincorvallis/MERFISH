@@ -106,16 +106,20 @@ Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets
 
 ## 🧪 Run it locally (no data needed)
 
-The production notebooks read private Vizgen S3/GCS data, so [`notebooks/demo_synthetic_pipeline.ipynb`](notebooks/demo_synthetic_pipeline.ipynb) (and [`scripts/demo_pipeline.py`](scripts/demo_pipeline.py)) run the **same Scanpy pipeline** on a small synthetic spatial dataset — proving the flow end to end and producing real, computed figures.
+The production notebooks read private Vizgen S3/GCS data, so [`notebooks/demo_synthetic_pipeline.ipynb`](notebooks/demo_synthetic_pipeline.ipynb) (and [`scripts/demo_pipeline.py`](scripts/demo_pipeline.py)) run the **same Scanpy pipeline** on a small synthetic spatial dataset — then a **squidpy** spatial-neighborhood analysis — proving the flow end to end with real, computed figures.
 
 ```bash
-pip install scanpy leidenalg igraph seaborn
-python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png
+pip install scanpy squidpy leidenalg igraph seaborn
+python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png  +  assets/demo_spatial_squidpy.png
 ```
 
 ![Synthetic pipeline demo](assets/demo_pipeline.png)
 
-<sub>Leiden recovers all 6 simulated cell-type domains — separated in UMAP, contiguous in tissue space, with a clean block-diagonal marker signature. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
+<sub>Leiden recovers all 6 simulated cell-type domains — separated in UMAP, contiguous in tissue space, with a clean block-diagonal marker signature.</sub>
+
+<p align="center"><img src="assets/demo_spatial_squidpy.png" width="430"/></p>
+
+<sub><b>squidpy</b> neighborhood enrichment on the same cells — strong positive self-enrichment (diagonal), depleted off-diagonal — the spatial question MERFISH coordinates uniquely let you ask. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
 
 ## 🙏 Credits
 
