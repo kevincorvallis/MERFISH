@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 import atlas_registration as ar
+from abc_fixtures import load_abc_reference, sample_cell_types
 
 
 # --- synthetic ground truth --------------------------------------------------
@@ -36,12 +37,17 @@ def _cells(seed=0, n=4000, tilt=0.12):
     """Sample cells from an obliquely-cut coronal plane through the synthetic atlas.
 
     Returns the ground-truth plane, the cells (in-plane uv coords), their true region
-    labels, and a region-dependent 'cell type' so the QC composition cross-check has signal.
+    labels, ABC-derived cell classes (bundled reference — not ``ct{region_id}``), and
+    the reference composition table used for QC.
     """
     annotation, ontology = _atlas()
     plane = ar.coronal_plane(annotation.shape, tilt=tilt)
-    cells = ar.sample_section_cells(annotation, plane, n=n, seed=seed)
-    return annotation, ontology, plane, cells
+    raw = ar.sample_section_cells(annotation, plane, n=n, seed=seed)
+    reference = load_abc_reference()
+    rng = np.random.default_rng(seed)
+    cell_type = sample_cell_types(raw["truth_region"], reference, rng)
+    cells = {**raw, "cell_type": cell_type}
+    return annotation, ontology, plane, cells, reference
 
 
 # --- geometry ----------------------------------------------------------------
@@ -70,7 +76,7 @@ def test_label_transfer_recovers_planted_regions():
     """Mapping cells through the *correct* registration and looking up the annotation
     volume must recover the region each cell was sampled from (catches axis-order/rounding
     bugs that silently corrupt every downstream label)."""
-    annotation, ontology, plane, cells = _cells()
+    annotation, ontology, plane, cells, _ = _cells()
     reg = ar.PlaneRegistration(plane)
     out = ar.assign_regions(cells["uv"], reg, annotation, ontology)
 
@@ -98,7 +104,7 @@ def test_confidence_is_calibrated_under_registration_error():
     """The novel layer: under a realistic (slightly wrong) registration, the
     registration-ensemble bootstrap confidence must be *calibrated* — cells we get right
     should carry higher confidence than cells we get wrong."""
-    annotation, ontology, true_plane, cells = _cells()
+    annotation, ontology, true_plane, cells, _ = _cells()
     # the *estimated* registration is the truth plus a small, fixed anchoring error
     est = true_plane.perturb(np.random.default_rng(7), angle_deg=2.5, shift=2.5)
     reg = ar.PlaneRegistration(est)
@@ -115,7 +121,7 @@ def test_confidence_is_calibrated_under_registration_error():
 def test_cells_near_region_boundaries_are_less_confident():
     """Boundary ambiguity must show up as lower confidence — a cell deep inside a region is
     more certain than one straddling a border."""
-    annotation, ontology, true_plane, cells = _cells()
+    annotation, ontology, true_plane, cells, _ = _cells()
     reg = ar.PlaneRegistration(true_plane.perturb(np.random.default_rng(1),
                                                   angle_deg=2.0, shift=2.0))
     conf = ar.region_confidence(cells["uv"], reg, annotation,
@@ -127,7 +133,7 @@ def test_cells_near_region_boundaries_are_less_confident():
 
 
 def test_region_confidence_is_deterministic():
-    annotation, ontology, true_plane, cells = _cells()
+    annotation, ontology, true_plane, cells, _ = _cells()
     reg = ar.PlaneRegistration(true_plane.perturb(np.random.default_rng(2), shift=2.0))
     a = ar.region_confidence(cells["uv"], reg, annotation, n_perturb=32, seed=0)
     b = ar.region_confidence(cells["uv"], reg, annotation, n_perturb=32, seed=0)
@@ -145,12 +151,14 @@ def test_jensen_shannon_bounds():
 
 
 def test_qc_composition_detects_misregistration():
-    """The QC cross-check: a section's per-region cell-type composition should match the ABC
-    reference under a good registration and *diverge* under a bad one. We stand in the ABC
-    reference with the true-assignment composition; a badly-warped registration must score
-    measurably worse."""
-    annotation, ontology, true_plane, cells = _cells()
-    reference = ar.region_composition(cells["truth_region"], cells["cell_type"])
+    """The QC cross-check: a section's per-region cell-type composition should match the Allen
+    ABC reference (bundled, offline) under a good registration and *diverge* under a bad one.
+
+    Cell classes are sampled from the external reference — not the circular ``ct{region_id}``
+    taxonomy — so the test validates orthogonal composition QC, not region-id self-consistency.
+    """
+    annotation, ontology, true_plane, cells, reference = _cells()
+    assert not any(str(ct).startswith("ct") for ct in np.unique(cells["cell_type"]))
 
     good = ar.assign_regions(cells["uv"], ar.PlaneRegistration(true_plane),
                              annotation, ontology)
@@ -161,7 +169,7 @@ def test_qc_composition_detects_misregistration():
     qc_good = ar.section_qc(good["region_id"], cells["cell_type"], reference)
     qc_bad = ar.section_qc(bad["region_id"], cells["cell_type"], reference)
 
-    assert qc_good["score"] < 0.05, f"good registration should match reference: {qc_good['score']:.3f}"
+    assert qc_good["score"] < 0.05, f"good registration should match ABC reference: {qc_good['score']:.3f}"
     assert qc_bad["score"] > qc_good["score"] + 0.1, (
         f"QC must flag misregistration: good={qc_good['score']:.3f} bad={qc_bad['score']:.3f}")
 
@@ -172,6 +180,13 @@ def test_qc_composition_detects_misregistration():
 def test_heavy_backends_are_stubbed_with_install_hint(fn):
     with pytest.raises(NotImplementedError):
         getattr(ar, fn)()
+
+
+def test_stalign_proof_asset_is_tracked():
+    """The real STalign LDDMM demo figure is checked in (proof point for the deformable backend)."""
+    from pathlib import Path
+    fig = Path(__file__).resolve().parent.parent / "assets" / "atlas_registration_stalign.png"
+    assert fig.is_file() and fig.stat().st_size > 10_000
 
 
 # --- live: real Allen CCFv3 via brainglobe (optional, networked) --------------

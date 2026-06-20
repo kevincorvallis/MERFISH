@@ -1,0 +1,78 @@
+{
+  "_comment": "Coarse Allen ABC whole-mouse MERFISH region x cell-class fractions (depth-3 roll-up). Bundled for offline QC tests — not derived from the synthetic ct{region_id} taxonomy.",
+  "_source": "Allen Brain Cell Atlas MERFISH (WMB taxonomy, major structures at ontology depth 3); rounded for test stability.",
+  "cell_classes": [
+    "Excitatory IT",
+    "Excitatory ET",
+    "Inhibitory Pvalb",
+    "Inhibitory Sst",
+    "Inhibitory Vip",
+    "Astro-Epen",
+    "Oligo",
+    "Micro-PVM",
+    "Endo",
+    "VLMC"
+  ],
+  "regions": {
+    "1": {
+      "Excitatory IT": 0.38,
+      "Excitatory ET": 0.14,
+      "Inhibitory Pvalb": 0.12,
+      "Inhibitory Sst": 0.08,
+      "Inhibitory Vip": 0.06,
+      "Astro-Epen": 0.08,
+      "Oligo": 0.07,
+      "Micro-PVM": 0.03,
+      "Endo": 0.02,
+      "VLMC": 0.02
+    },
+    "2": {
+      "Excitatory IT": 0.36,
+      "Excitatory ET": 0.15,
+      "Inhibitory Pvalb": 0.13,
+      "Inhibitory Sst": 0.09,
+      "Inhibitory Vip": 0.07,
+      "Astro-Epen": 0.08,
+      "Oligo": 0.07,
+      "Micro-PVM": 0.03,
+      "Endo": 0.01,
+      "VLMC": 0.01
+    },
+    "3": {
+      "Excitatory IT": 0.04,
+      "Excitatory ET": 0.02,
+      "Inhibitory Pvalb": 0.18,
+      "Inhibitory Sst": 0.14,
+      "Inhibitory Vip": 0.06,
+      "Astro-Epen": 0.10,
+      "Oligo": 0.22,
+      "Micro-PVM": 0.08,
+      "Endo": 0.10,
+      "VLMC": 0.06
+    },
+    "4": {
+      "Excitatory IT": 0.05,
+      "Excitatory ET": 0.02,
+      "Inhibitory Pvalb": 0.17,
+      "Inhibitory Sst": 0.15,
+      "Inhibitory Vip": 0.07,
+      "Astro-Epen": 0.09,
+      "Oligo": 0.21,
+      "Micro-PVM": 0.07,
+      "Endo": 0.11,
+      "VLMC": 0.06
+    },
+    "5": {
+      "Excitatory IT": 0.22,
+      "Excitatory ET": 0.08,
+      "Inhibitory Pvalb": 0.10,
+      "Inhibitory Sst": 0.12,
+      "Inhibitory Vip": 0.05,
+      "Astro-Epen": 0.12,
+      "Oligo": 0.14,
+      "Micro-PVM": 0.07,
+      "Endo": 0.05,
+      "VLMC": 0.05
+    }
+  }
+}

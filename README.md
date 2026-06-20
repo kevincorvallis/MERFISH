@@ -7,7 +7,7 @@
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
-![tests](https://img.shields.io/badge/tests-20%20offline%20%2F%2025%20total-brightgreen)
+![tests](https://img.shields.io/badge/tests-21%20offline%20%2F%2026%20total-brightgreen)
 ![CI](https://github.com/kevincorvallis/MERFISH/actions/workflows/test.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
@@ -15,9 +15,10 @@
 
 > **Implementation status:** the Scanpy pipeline, principled cell-type mapper, segmentation
 > benchmark, and atlas-registration **core** (geometry + label transfer + calibrated UQ + QC) are
-> implemented and covered by offline pytest. Production backends that need large downloads or
-> isolated envs — Allen `cell_type_mapper`, DeepSlice, STalign, ANTs — are **stubbed** with
-> install hints. See [`docs/methods-review-2026.md`](docs/methods-review-2026.md).
+> implemented and covered by offline pytest. The real **CCFv3** (brainglobe) and the **STalign**
+> LDDMM deformable backend are implemented and validated in an isolated env (live tests). Remaining
+> backends that need large downloads — Allen `cell_type_mapper`, DeepSlice, ANTs — are **stubbed**
+> with install hints. See [`docs/methods-review-2026.md`](docs/methods-review-2026.md).
 
 ![Spatial transcript-density map of a coronal mouse-brain section](assets/hero_coronal_brain_spatial_map.png)
 
@@ -119,6 +120,7 @@ MERFISH/
 │   ├── celltype_mapping.py               # principled MapMyCells-style cell-type mapping
 │   ├── segmentation_demo.py              # transcript-aware segmentation swap
 │   ├── atlas_registration.py             # 2D section → CCFv3 + per-cell region labels
+│   ├── stalign_demo.py                   # real STalign LDDMM 2D→3D fit on the CCFv3
 │   └── live_test.py                      # pipeline on REAL public MERFISH data
 ├── tests/
 │   ├── test_pipeline.py                  # pytest: synthetic + live real-data
@@ -154,7 +156,7 @@ jupyter lab        # open notebooks/broad_local_adaptation.ipynb
 | Live pytest + figures | `pip install squidpy leidenalg igraph seaborn` | `pytest` (live), `live_test.py`, `celltype_mapping.py --fig` |
 | Real Allen CCFv3 | `pip install brainglobe-atlasapi` | `atlas_registration.py --real` |
 | DeepSlice anchoring | `pip install DeepSlice` | `deepslice_anchor()` (stubbed) |
-| STalign deformable warp | isolated `.venv-reg` with `torch` + STalign | `stalign_register()` (stubbed; pins numpy&lt;1.24) |
+| STalign deformable warp | isolated `.venv-reg` with `torch` + STalign | `stalign_register()` — **implemented + validated** (pins numpy&lt;1.24) |
 | Allen MapMyCells | `pip install cell-type-mapper` + WMB reference | `map_with_cell_type_mapper()` (stubbed) |
 
 Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets/mouse_brain_map/BrainReceptorShowcase/`. Point each notebook's `base_path` / `dataset_path` at your local copy or bucket — raw MERSCOPE output (`*.tif`, `*.hdf5`, large `*.csv`) is git-ignored. The QC notebook also needs Vizgen's proprietary `merlin` / `encoder.abundance` packages.
@@ -219,9 +221,10 @@ on the **real Allen CCFv3** (loaded via `brainglobe-atlasapi`, NumPy-2 safe).
   reference (Jensen-Shannon); a section with implausible regions is flagged (QC `0.14 → 0.96`
   under deliberate misregistration on the real CCFv3).
 
-> **Honest limitation:** validated accuracies use synthetic anchoring error on real CCF geometry
-> (ground truth known), not a real DeepSlice/STalign fit. DeepSlice / STalign / ANTs backends are
-> stubbed — see [`docs/atlas-registration-2026.md`](docs/atlas-registration-2026.md) § Implementation status.
+> **Honest scope:** the calibration/QC figures above use a synthetic anchoring error on real CCF
+> geometry (ground truth known). The **STalign** deformable backend is now **implemented and
+> validated with a real LDDMM fit** (below); **DeepSlice** and **ANTs** remain stubbed with install
+> hints — see [`docs/atlas-registration-2026.md`](docs/atlas-registration-2026.md) § Implementation status.
 
 <p align="center">
   <img src="assets/atlas_registration.png" width="49%"/>
@@ -239,6 +242,22 @@ python scripts/atlas_registration.py --fig                   # synthetic demo (n
 python scripts/atlas_registration.py --real --fig --depth 3  # real Allen CCFv3 (needs brainglobe-atlasapi)
 ```
 
+**Real STalign LDDMM — the deformable engine, validated on the CCFv3.** Registering a 2D coronal
+section to the 3D atlas with `STalign.LDDMM_3D_to_slice`, then lifting region labels onto every
+cell. The section is cut from a *known* CCF plane, so the answer is checkable: STalign recovers its
+anterior–posterior position to **47 µm (< 0.5 voxel)** and matches **0.89** of per-cell region
+labels (depth-3), in ~2 min on CPU — real diffeomorphic 2D→3D alignment, not a stub.
+
+![Real STalign 2D→3D alignment to the CCFv3](assets/atlas_registration_stalign.png)
+
+<sub>Left → right: the input 2D section (true regions); the regions STalign assigns after warping it
+into the CCFv3 (near-identical); the recovered AP position peaking at the true plane. Generated by
+[`scripts/stalign_demo.py`](scripts/stalign_demo.py) in the isolated `.venv-reg`.</sub>
+
+```bash
+.venv-reg/bin/python scripts/stalign_demo.py --niter 100     # real STalign LDDMM fit (torch + STalign)
+```
+
 ## ✅ Tested on real data
 
 The pipeline isn't only demoed — it's **validated by a `pytest` suite**, including a *live* test that downloads a real MERFISH dataset ([Moffitt et al. 2018](https://www.science.org/doi/10.1126/science.aau5324), mouse hypothalamic preoptic region — 73,626 cells × 160 genes, via `squidpy.datasets`) and checks that unsupervised Leiden clustering **recovers the authors' published cell types**.
@@ -250,7 +269,7 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 ```bash
 pip install -r requirements-dev.txt
 pip install squidpy leidenalg igraph seaborn   # for live tests + figure scripts
-pytest -m "not live"      # 20 offline (synthetic) — no network needed
+pytest -m "not live"      # 21 offline (synthetic) — no network needed
 pytest                    # + 5 live: real MERFISH download, CCFv3, STalign (optional deps)
 ```
 

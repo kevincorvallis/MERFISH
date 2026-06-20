@@ -7,29 +7,14 @@
     pytest tests/ -m "not live"   # offline only
 """
 
-import numpy as np
 import pytest
-import scanpy as sc
 
 import live_test
-
-
-def _synthetic(n=1500, g=40, k=5, seed=0):
-    rng = np.random.default_rng(seed)
-    dom = rng.integers(0, k, n)
-    lib = rng.lognormal(0.0, 0.3, n)
-    marker_of = {j: np.arange(j * (g // k), (j + 1) * (g // k)) for j in range(k)}
-    rate = np.full((n, g), 0.3)
-    for c in range(n):
-        rate[c, marker_of[dom[c]]] += rng.uniform(6, 14)
-    X = rng.poisson(rate * lib[:, None]).astype("float32")
-    ad = sc.AnnData(X)
-    ad.obsm["spatial"] = rng.uniform(0, 40, size=(n, 2))
-    return ad, k
+from synthetic_fixtures import synthetic_domain_adata
 
 
 def test_pipeline_runs_and_recovers_structure():
-    ad, k = _synthetic()
+    ad, k = synthetic_domain_adata()
     m = live_test.run_pipeline(ad)
     assert m["n_clusters"] >= 2, "pipeline should find multiple clusters"
     assert m["n_clusters"] <= 2 * k, "should not wildly over-cluster clean data"
@@ -38,8 +23,8 @@ def test_pipeline_runs_and_recovers_structure():
 
 
 def test_pipeline_is_deterministic():
-    a1, _ = _synthetic(seed=1)
-    a2, _ = _synthetic(seed=1)
+    a1, _ = synthetic_domain_adata(seed=1)
+    a2, _ = synthetic_domain_adata(seed=1)
     assert live_test.run_pipeline(a1)["n_clusters"] == \
         live_test.run_pipeline(a2)["n_clusters"]
 

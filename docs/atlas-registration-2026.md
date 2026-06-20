@@ -302,10 +302,22 @@ and trust only confident cells); (3) the **QC cross-check cleanly separates good
 bad registration** (e.g. 0.14 → 0.96 at depth 3). This is the §4 design — left open by the
 literature — working on real data. Figure: [`assets/atlas_registration_ccfv3.png`](../assets/atlas_registration_ccfv3.png).
 
-> **Honest limitation:** these accuracies use a *synthetic anchoring error* on real CCF geometry
-> (ground truth known), not a real DeepSlice/STalign fit, and use synthetic region-conditioned
-> "cell types" for the QC signal. They validate the geometry + label-transfer + UQ + QC layers on
-> real atlas structure; they are **not** a benchmark of a real registration engine's accuracy.
+**Real STalign LDDMM deformable fit (validated).** Beyond the synthetic-error study above,
+`stalign_register` wires the genuine **STalign `LDDMM_3D_to_slice`** (molecular-aware affine +
+diffeomorphism) behind the same `Registration` interface, so label transfer / UQ / QC run on it
+unchanged. On a section cut from a *known* CCFv3 plane (allen_mouse_100um, niter=100, ~2 min CPU),
+STalign recovers the section's anterior–posterior position to **46.7 µm (< 0.5 voxel)** and matches
+**0.89** of per-cell region labels at depth-3 — a *real* diffeomorphic fit, ground-truthed. Covered
+by the live test `test_stalign_recovers_known_ccf_slice` and
+[`scripts/stalign_demo.py`](../scripts/stalign_demo.py); figure
+[`assets/atlas_registration_stalign.png`](../assets/atlas_registration_stalign.png). STalign pins
+`numpy<1.24`, so it lives in an isolated env (the repo runs numpy 2.4).
+
+> **Honest scope:** the calibration/QC numbers in the table use a *synthetic anchoring error* on
+> real CCF geometry (ground truth known) and synthetic region-conditioned "cell types" for the QC
+> signal — they validate the geometry + label-transfer + UQ + QC layers, not a registration
+> engine's accuracy. The STalign result above *is* a real-fit validation. **DeepSlice** and **ANTs**
+> remain stubbed with install hints.
 
 ## Refuted / do-not-claim
 

@@ -12,44 +12,15 @@ the Allen reference download.
   their own published ``Cell_class`` taxonomy via a held-out split.
 """
 
-import numpy as np
 import pytest
-import scanpy as sc
 
 import celltype_mapping as cm
+from synthetic_fixtures import synthetic_domain_adata
 
 
 def _labeled(n=2400, g=60, k=6, ambig_frac=0.18, seed=0):
-    """Synthetic labelled spatial data: k cell types with marker programs.
-
-    A fraction of cells are deliberately *ambiguous* (a blend of two types'
-    markers) so that some calls are genuinely uncertain — this is what lets us
-    test confidence calibration rather than a trivially perfect classifier.
-    """
-    rng = np.random.default_rng(seed)
-    mpr = g // k
-    marker_of = {j: np.arange(j * mpr, (j + 1) * mpr) for j in range(k)}
-    dom = rng.integers(0, k, n)
-    lib = rng.lognormal(0.0, 0.3, n)
-
-    n_ambig = int(ambig_frac * n)
-    ambig = np.zeros(n, dtype=bool)
-    ambig[rng.choice(n, n_ambig, replace=False)] = True
-
-    rate = np.full((n, g), 0.3)
-    for c in range(n):
-        rate[c, marker_of[dom[c]]] += rng.uniform(6, 13)
-        if ambig[c]:                                  # bleed in a second program
-            other = (dom[c] + rng.integers(1, k)) % k
-            rate[c, marker_of[other]] += rng.uniform(4, 9)
-    X = rng.poisson(rate * lib[:, None]).astype("float32")
-
-    ad = sc.AnnData(X)
-    ad.var_names = [f"g{j:02d}" for j in range(g)]
-    ad.obs["cell_type"] = [f"type{d}" for d in dom]
-    ad.obs["cell_type"] = ad.obs["cell_type"].astype("category")
-    ad.obs["is_ambiguous"] = ambig
-    return ad, k
+    """Synthetic labelled spatial data with ambiguous cells for calibration tests."""
+    return synthetic_domain_adata(n=n, g=g, k=k, seed=seed, ambig_frac=ambig_frac)
 
 
 def test_mapper_recovers_known_types():
