@@ -91,3 +91,76 @@ def test_stalign_autoinit_recovers_posterior_scan():
     vox = reg.transform_points(cells)
     assert abs(np.median(vox[:, 0]) - ap) < 3.0, \
         f"auto-init AP recovery off: {np.median(vox[:, 0]):.1f} vs {ap}"
+
+
+# --- in-plane scale + rotation anchor ----------------------------------------
+
+def test_coarse_anchor_recovers_ap_under_scale_and_rotation():
+    """Extends the AP anchor to in-plane scale + rotation: a section that differs in scale AND
+    orientation from the atlas is still localized to the right AP, and the scale/rotation search
+    beats the no-transform baseline (it finds a non-trivial, better-scoring transform)."""
+    from scipy.ndimage import affine_transform
+    vol = _graded_volume()
+    res = np.array([1.0, 1.0, 1.0])
+    nx = vol.shape
+    xA = [np.arange(n) * d - (n - 1) * d / 2.0 for n, d in zip(nx, res)]
+    true_ap, s_true, th_true = 16, 1.2, 12.0
+
+    sl = vol[true_ap]
+    h, w = sl.shape
+    c = np.array([(h - 1) / 2.0, (w - 1) / 2.0])
+    t = np.deg2rad(th_true)
+    M = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]]) / s_true
+    section = affine_transform(sl, M, offset=c - M @ c, order=1)  # scaled + rotated section
+
+    scales = (0.8, 0.9, 1.0, 1.1, 1.2, 1.3)
+    thetas = (-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0)
+    found = ar.coarse_anchor(vol, res, section, xA[2], xA[1], scales=scales, thetas_deg=thetas)
+    base = ar.coarse_anchor(vol, res, section, xA[2], xA[1], scales=(1.0,), thetas_deg=(0.0,))
+
+    assert abs(found["ap"] - true_ap) <= 1, f"AP off: {found['ap']} vs {true_ap}"
+    assert found["ncc"] >= base["ncc"], "scale/rotation search should not score worse than identity"
+    assert (found["scale"], found["theta_deg"]) != (1.0, 0.0), "should find a non-trivial transform"
+
+
+def test_coarse_anchor_reduces_to_ap_search_when_grid_trivial():
+    """With a trivial (identity) scale/rotation grid, coarse_anchor agrees with coarse_ap_search."""
+    vol = _graded_volume()
+    res = np.array([1.0, 1.0, 1.0])
+    nx = vol.shape
+    xA = [np.arange(n) * d - (n - 1) * d / 2.0 for n, d in zip(nx, res)]
+    sec = vol[17]
+    a = ar.coarse_anchor(vol, res, sec, xA[2], xA[1], scales=(1.0,), thetas_deg=(0.0,))
+    best_ap, _ = ar.coarse_ap_search(vol, res, sec, xA[2], xA[1])
+    assert a["ap"] == best_ap and a["scale"] == 1.0 and a["theta_deg"] == 0.0
+
+
+# --- DeepSlice production anchor ----------------------------------------------
+
+def test_anchoring_to_plane_matches_quicknii_convention():
+    """A DeepSlice/QuickNII 9-value anchoring (O, U, V) becomes an AnchoredPlane where a
+    fractional image coordinate (fx across width, fy down height) maps to O + fx*U + fy*V."""
+    anchoring = [10.0, 0, 0, 0, 100.0, 0, 0, 0, 80.0]  # O, U, V
+    plane = ar.anchoring_to_plane(anchoring)
+    corners = plane.to_ccf([[0, 0], [1, 0], [0, 1], [1, 1]])
+    assert np.allclose(corners[0], [10, 0, 0])      # O
+    assert np.allclose(corners[1], [10, 100, 0])    # O + U
+    assert np.allclose(corners[2], [10, 0, 80])     # O + V
+    assert np.allclose(corners[3], [10, 100, 80])   # O + U + V
+
+
+def test_anchoring_to_plane_rejects_bad_length():
+    with pytest.raises(ValueError):
+        ar.anchoring_to_plane([1, 2, 3])
+
+
+def test_deepslice_anchor_is_wired_and_guarded():
+    """deepslice_anchor runs the *real* DeepSlice; without it installed it must raise a clear
+    NotImplementedError (a wired path that degrades gracefully, not a silent stub)."""
+    try:
+        import DeepSlice  # noqa: F401
+    except ImportError:
+        with pytest.raises(NotImplementedError):
+            ar.deepslice_anchor("/nonexistent/section/images")
+    else:  # pragma: no cover - only when DeepSlice is installed
+        pytest.skip("DeepSlice installed; exercised by integration runs with real images")

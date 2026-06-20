@@ -160,7 +160,7 @@ jupyter lab        # open notebooks/broad_local_adaptation.ipynb
 
 | Extra | Install | Used for |
 |---|---|---|
-| DeepSlice anchoring | `pip install DeepSlice` | `deepslice_anchor()` (stubbed) |
+| DeepSlice anchoring | `pip install DeepSlice` | `deepslice_anchor(image_dir)` — wired (needs section images) |
 | Allen MapMyCells | `pip install cell-type-mapper` + WMB reference | `map_with_cell_type_mapper()` (stubbed) |
 
 Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets/mouse_brain_map/BrainReceptorShowcase/`. Point each notebook's `base_path` / `dataset_path` at your local copy or bucket — raw MERSCOPE output (`*.tif`, `*.hdf5`, large `*.csv`) is git-ignored. The QC notebook also needs Vizgen's proprietary `merlin` / `encoder.abundance` packages.
@@ -339,7 +339,7 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - **Spatially variable genes** — Moran's I (`squidpy.gr.spatial_autocorr`), `SpatialDE`, or `SPARK-X`; cross-validate, since no method is canonical.
 - **Cell–cell communication** — `LIANA+` for spatially-resolved ligand–receptor inference on the cell-type map.
 - **Principled reference mapping** — ✅ **core implemented** in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py): marker-correlation + bootstrap-confidence (beats cosine heuristic `0.77` vs `0.71`). Stub: genuine `cell_type_mapper` against ABC Atlas WMB taxonomy.
-- **Atlas registration & per-cell region labels** — ✅ **core implemented** in [`scripts/atlas_registration.py`](scripts/atlas_registration.py): geometry, label transfer, calibrated UQ + QC on real CCFv3, plus the **STalign** deformable engine with an **auto AP-anchor** (`coarse_ap_search`). Stubbed: DeepSlice / ANTs engines — see [atlas-registration review](docs/atlas-registration-2026.md) (incl. limitations).
+- **Atlas registration & per-cell region labels** — ✅ **core implemented** in [`scripts/atlas_registration.py`](scripts/atlas_registration.py): geometry, label transfer, calibrated UQ + QC on real CCFv3, plus the **STalign** deformable engine with an **auto affine anchor** (`coarse_anchor` — AP + in-plane scale/rotation). DeepSlice production anchor (`deepslice_anchor`) wired (needs section images); ANTs stubbed — see [atlas-registration review](docs/atlas-registration-2026.md) (incl. limitations).
 - **Atlas integration & interchange** — migrate to `SpatialData`/Zarr and map onto the BICCN / Allen Brain Cell Atlas whole-mouse-brain MERFISH taxonomies.
 
 ## 📖 References
