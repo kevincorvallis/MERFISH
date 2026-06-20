@@ -121,6 +121,54 @@ python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png  +  assets/de
 
 <sub><b>squidpy</b> neighborhood enrichment on the same cells — strong positive self-enrichment (diagonal), depleted off-diagonal — the spatial question MERFISH coordinates uniquely let you ask. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
 
+## 🌐 Spatial transcriptomics in context
+
+MERFISH — the chemistry behind Vizgen's MERSCOPE and the basis for this repo's data — is one of three dominant **imaging-based, subcellular-resolution** spatial transcriptomics platforms, alongside 10x Genomics **Xenium** (padlock-probe ISH) and Bruker/NanoString **CosMx** (cyclic FISH). Imaging methods give single-molecule localization on *targeted* panels; sequencing-based methods (Visium HD, Stereo-seq, Slide-seqV2) trade spatial precision for *unbiased whole-transcriptome* coverage. This repo's mouse-brain data used a targeted panel on the original MERSCOPE — the pre-2024 product generation.
+
+| Platform | Chemistry | Max panel (commercial) | Resolution | Notable 2024–25 updates |
+|---|---|---|---|---|
+| **Vizgen MERSCOPE Ultra** | MERFISH (iterative smFISH barcoding) | ~1,000 genes; no whole-transcriptome product | 100 nm pixel (subcellular) | MERSCOPE Ultra + MERFISH 2.0 (AACR 2024); Vizgen–Ultivue merger (Oct 2024) |
+| **10x Xenium (Prime 5K)** | Padlock-probe ligation + RCA, cyclic imaging | ~5,000 genes (5,006 pre-designed) + 100 custom | XY <30 nm, Z <150 nm | Prime 5K shipping (Jun 2024); Xenium Protein co-detection |
+| **Bruker/NanoString CosMx** | Cyclic FISH, no RT/PCR | 6,175-gene (6K) + WTX ~19,000 human genes | ≤100 nm FOV-scale (no published localization figure) | 6K panel (Feb 2024); WTX whole-transcriptome (summer 2025); CosMx 2.0 AI segmentation |
+
+<details><summary>Sequencing-based platforms (whole-transcriptome, lower spatial precision)</summary>
+
+| Platform | Method | Resolution | Coverage |
+|---|---|---|---|
+| **10x Visium HD** | Probe capture on 2 µm array + NGS | 2 µm bins (single-cell scale) | >18,000 genes |
+| **Stereo-seq (STOmics)** | DNB-patterned array + NGS | 0.22 µm spot pitch (binned) | Whole transcriptome |
+| **Slide-seqV2** | Barcoded bead array + NGS | ~10 µm beads | Near-whole transcriptome |
+
+</details>
+
+**Industry insights**
+- **Toward whole-transcriptome imaging** — panels grew from hundreds to thousands of genes; CosMx now ships a ~19,000-gene WTX assay, Xenium offers ~5,000, while MERSCOPE stays targeted (~1,000 ceiling) as of mid-2026.
+- **Standardization on scverse / SpatialData** — the field is converging on the AnnData/SpatialData substrate ([Marconato et al., *Nat Methods* 2024](https://doi.org/10.1038/s41592-024-02212-x)); `spatialdata-io` reads MERSCOPE, Xenium, and CosMx into one OME-NGFF Zarr store.
+- **Segmentation is the active front** — transcript-aware (Baysor, proseg) and deep-learning (Cellpose-SAM) methods increasingly beat morphology-only segmentation in dense tissue; vendors now ship AI segmentation.
+- **No single platform wins** — 2025 benchmarks ([Wang et al., *Nat Commun*](https://www.nature.com/articles/s41467-025-64990-y)) find imaging best for subcellular precision and validated cell-type calls, sequencing-HD best for unbiased discovery.
+
+## 🗺️ Modern extensions
+
+High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing scope:
+
+- **Spatial statistics & niche enrichment** — `squidpy` for spatial neighbor graphs, neighborhood enrichment, and co-occurrence *(shown in the runnable demo above)*.
+- **Spatial domain discovery** — `CellCharter` for batch-aware spatial niches across samples.
+- **Spatially variable genes** — Moran's I (`squidpy.gr.spatial_autocorr`), `SpatialDE`, or `SPARK-X`; cross-validate, since no method is canonical.
+- **Cell–cell communication** — `LIANA+` for spatially-resolved ligand–receptor inference on the cell-type map.
+- **Principled reference mapping** — swap heuristic label transfer for `cell2location`, `Tangram`, or `scANVI` against an scRNA-seq reference.
+- **Atlas integration & interchange** — migrate to `SpatialData`/Zarr and map onto the BICCN / Allen Brain Cell Atlas whole-mouse-brain MERFISH taxonomies.
+
+## 📖 References
+
+- [Chen et al. (2015), *Science* — MERFISH founding paper](https://www.science.org/doi/10.1126/science.aaa6090)
+- [Zeisel et al. (2018), *Cell* — Molecular Architecture of the Mouse Nervous System](https://www.sciencedirect.com/science/article/pii/S009286741830789X) (the cell-type reference used here)
+- [Zhang et al. (2023), *Nature* — whole mouse-brain MERFISH atlas](https://www.nature.com/articles/s41586-023-06808-9)
+- [Yao et al. (2023), *Nature* — Allen Brain Cell Atlas of the whole mouse brain](https://www.nature.com/articles/s41586-023-06812-z)
+- [Marconato et al. (2024), *Nat Methods* — SpatialData framework](https://doi.org/10.1038/s41592-024-02212-x)
+- [Palla et al. (2022), *Nat Methods* — Squidpy](https://doi.org/10.1038/s41592-021-01358-2)
+- [Kleshchevnikov et al. (2022), *Nat Biotechnol* — cell2location](https://doi.org/10.1038/s41587-021-01139-4)
+- [Wang et al. (2025), *Nat Commun* — benchmarking imaging spatial platforms](https://www.nature.com/articles/s41467-025-64990-y)
+
 ## 🙏 Credits
 
 Built on [Vizgen MERSCOPE](https://vizgen.com), the [Zeisel et al.](http://mousebrain.org) scRNAseq taxonomy, [Scanpy](https://scanpy.readthedocs.io), [Clustergrammer2](https://clustergrammer.readthedocs.io), and Observable. Released under the **MIT License**.
