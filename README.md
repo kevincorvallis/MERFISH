@@ -2,7 +2,7 @@
 
 > Single-cell-resolution spatial transcriptomics on the intact mouse brain — from raw Vizgen MERSCOPE output to interactive, cell-type-mapped spatial heatmaps.
 
-![Python](https://img.shields.io/badge/Python-3.7%2B-3776AB?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-Notebooks-F37626?logo=jupyter&logoColor=white)
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
@@ -130,33 +130,42 @@ MERFISH/
 ├── docs/
 │   ├── methods-review-2026.md            # cell-type / segmentation / registration upgrades
 │   └── atlas-registration-2026.md        # 2D section → CCFv3 registration review (cited)
-├── requirements-dev.txt                  # slim deps for offline pytest
+├── requirements-dev.txt                  # core + live-test deps (Python 3.12+, numpy 2.x)
+├── requirements-reg.txt                  # isolated STalign env (Python 3.11, numpy 1.23.4)
 ├── LICENSE
-├── .github/workflows/test.yml            # offline pytest on push/PR (Python 3.11)
+├── .github/workflows/test.yml            # offline pytest on push/PR (Python 3.12)
 ├── pytest.ini
 └── assets/                               # hero · QC · cell-type · mapping · demo · live
 ```
 
 ## 🚀 Quick start
 
-**Core env** (notebooks + offline tests):
+**Core env** (notebooks + offline + live pytest — Python **3.12+**, numpy **2.x**):
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-pip install leidenalg igraph loompy clustergrammer2 observable_jupyter \
-            tifffile opencv-python h5py matplotlib seaborn fsspec gcsfs
+uv venv --python 3.12 .venv && source .venv/bin/activate
+uv pip install -r requirements-dev.txt
+# notebook extras (not in requirements-dev.txt):
+uv pip install loompy clustergrammer2 observable_jupyter \
+            tifffile opencv-python fsspec gcsfs jupyterlab
 jupyter lab        # open notebooks/broad_local_adaptation.ipynb
 ```
 
-**Optional extras** (install in separate envs when needed — some pin conflicting numpy versions):
+**Registration env** (STalign LDDMM — **must stay isolated**; STalign still pins `numpy==1.23.4` on GitHub, so this env stays on Python **3.11** and cannot share the core stack):
+
+```bash
+uv venv --python 3.11 .venv-reg && source .venv-reg/bin/activate
+uv pip install -r requirements-reg.txt
+uv pip install --no-deps "STalign @ git+https://github.com/JEFworks-Lab/STalign.git"
+.venv-reg/bin/python scripts/stalign_demo.py --niter 100
+.venv-reg/bin/python -m pytest tests/test_atlas_registration.py::test_stalign_recovers_known_ccf_slice -m live
+```
+
+**Other optional extras** (install when needed):
 
 | Extra | Install | Used for |
 |---|---|---|
-| Live pytest + figures | `pip install squidpy leidenalg igraph seaborn` | `pytest` (live), `live_test.py`, `celltype_mapping.py --fig` |
-| Real Allen CCFv3 | `pip install brainglobe-atlasapi` | `atlas_registration.py --real` |
 | DeepSlice anchoring | `pip install DeepSlice` | `deepslice_anchor()` (stubbed) |
-| STalign deformable warp | isolated `.venv-reg` with `torch` + STalign | `stalign_register()` — **implemented + validated** (pins numpy&lt;1.24) |
 | Allen MapMyCells | `pip install cell-type-mapper` + WMB reference | `map_with_cell_type_mapper()` (stubbed) |
 
 Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets/mouse_brain_map/BrainReceptorShowcase/`. Point each notebook's `base_path` / `dataset_path` at your local copy or bucket — raw MERSCOPE output (`*.tif`, `*.hdf5`, large `*.csv`) is git-ignored. The QC notebook also needs Vizgen's proprietary `merlin` / `encoder.abundance` packages.
@@ -267,10 +276,9 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 <sub>Unsupervised Leiden (27 clusters) vs the 16 published cell classes: concordant UMAP structure, real anatomy in a single coronal slice (third ventricle visible), and a near-diagonal concordance heatmap — <b>Adjusted Rand Index = 0.28</b> vs ~0 for random labels. Generated live by <a href="scripts/live_test.py"><code>scripts/live_test.py</code></a>.</sub>
 
 ```bash
-pip install -r requirements-dev.txt
-pip install squidpy leidenalg igraph seaborn   # for live tests + figure scripts
+uv pip install -r requirements-dev.txt   # includes squidpy, leidenalg, brainglobe for live tests
 pytest -m "not live"      # 21 offline (synthetic) — no network needed
-pytest                    # + 5 live: real MERFISH download, CCFv3, STalign (optional deps)
+pytest -m live            # 4 live in .venv (MERFISH + CCFv3); STalign live test runs in .venv-reg
 ```
 
 ## 🌐 Spatial transcriptomics in context

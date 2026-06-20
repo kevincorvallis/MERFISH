@@ -1,0 +1,29 @@
+# Isolated registration env (.venv-reg) for STalign LDDMM + brainglobe CCFv3 live tests.
+# Python 3.11 only — STalign pins numpy==1.23.4 (no Py3.12 wheel; incompatible with numpy 2.x).
+#
+#   uv venv --python 3.11 .venv-reg
+#   uv pip install -r requirements-reg.txt
+#   uv pip install --no-deps "STalign @ git+https://github.com/JEFworks-Lab/STalign.git"
+
+numpy==1.23.4
+pandas==2.0.0
+torch==2.12.1
+scipy==1.13.1
+scikit-learn==1.3.2
+matplotlib==3.7.5
+seaborn==0.13.2
+pytest==9.1.1
+h5py==3.16.0
+scikit-image==0.24.0
+networkx==3.1
+pillow==9.5.0
+pynrrd==1.0.0
+plotly==5.14.1
+requests==2.34.2
+brainglobe-atlasapi==2.3.1
+# STalign runtime imports (not pulled in with --no-deps install)
+tornado==6.5.7
+docopt==0.6.2
+nptyping==2.5.0
+openpyxl==3.1.5
+pyyaml==6.0.3
