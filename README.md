@@ -47,6 +47,23 @@ Before any biological interpretation, [`qc_rnaseq_correlation.ipynb`](notebooks/
 
 </details>
 
+## 🧠 Cell types in space
+
+After clustering, each Leiden cluster is matched to the [Zeisel et al.](http://mousebrain.org) mouse-brain scRNAseq taxonomy (cluster signatures → shared PCA space → cosine distance) and projected back onto the section — recovering where each cell type lives.
+
+<p align="center">
+  <img src="assets/celltype_ependymal_cluster22.png" height="210"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/celltype_inhibitory_cluster24.png" height="210"/>
+</p>
+<p align="center"><sub><b>Left:</b> cluster 22 — ependymal / glial cells (<i>Aqp4, Gfap, Mlc1</i>) lining the ventricles. &nbsp; <b>Right:</b> cluster 24 — inhibitory neurons (<i>Gad1, Slc32a1, Cckar</i>).</sub></p>
+
+<details><summary>How clusters are mapped to cell types</summary>
+
+<p align="center"><img src="assets/method_celltype_mapping.png" width="620"/></p>
+
+</details>
+
 ## 📓 Notebooks
 
 | Notebook | What it does |
@@ -66,13 +83,15 @@ MERFISH/
 │   ├── showcase_mouse_brain.ipynb        # canonical end-to-end showcase
 │   ├── broad_local_adaptation.ipynb      # local adaptation (external SSDs)
 │   ├── transcript_viz_prototype.ipynb    # transcript-viz prototype
+│   ├── demo_synthetic_pipeline.ipynb     # ▶ runnable demo (no data needed)
 │   └── pipeline/                         # modular, versioned stages
 │       ├── qc_rnaseq_correlation.ipynb
 │       ├── umap_spatial_heatmap_v0.3.1.ipynb
 │       └── transcripts_genes_of_interest_v0.2.0.ipynb
 ├── scripts/
-│   └── qc_figures.py                     # seaborn QC summary figure
-└── assets/                               # hero spatial map + QC figures
+│   ├── qc_figures.py                     # seaborn QC summary figure
+│   └── demo_pipeline.py                  # runnable synthetic pipeline demo
+└── assets/                               # hero map · QC · cell-type · demo figures
 ```
 
 ## 🚀 Quick start
@@ -84,6 +103,19 @@ jupyter lab        # open notebooks/showcase_mouse_brain.ipynb
 ```
 
 Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets/mouse_brain_map/BrainReceptorShowcase/`. Point each notebook's `base_path` / `dataset_path` at your local copy or bucket — raw MERSCOPE output (`*.tif`, `*.hdf5`, large `*.csv`) is git-ignored. The QC notebook also needs Vizgen's proprietary `merlin` / `encoder.abundance` packages.
+
+## 🧪 Run it locally (no data needed)
+
+The production notebooks read private Vizgen S3/GCS data, so [`notebooks/demo_synthetic_pipeline.ipynb`](notebooks/demo_synthetic_pipeline.ipynb) (and [`scripts/demo_pipeline.py`](scripts/demo_pipeline.py)) run the **same Scanpy pipeline** on a small synthetic spatial dataset — proving the flow end to end and producing real, computed figures.
+
+```bash
+pip install scanpy leidenalg igraph seaborn
+python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png
+```
+
+![Synthetic pipeline demo](assets/demo_pipeline.png)
+
+<sub>Leiden recovers all 6 simulated cell-type domains — separated in UMAP, contiguous in tissue space, with a clean block-diagonal marker signature. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
 
 ## 🙏 Credits
 
