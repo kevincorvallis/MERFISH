@@ -5,7 +5,9 @@
 ![Python](https://img.shields.io/badge/Python-3.7%2B-3776AB?logo=python&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-Notebooks-F37626?logo=jupyter&logoColor=white)
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
+![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
+![tests](https://img.shields.io/badge/tests-3%20passed-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 **MERFISH** images individual RNA molecules *in situ* — reading out hundreds of genes per cell while keeping each transcript's exact position in intact tissue. This repo analyzes Vizgen **MERSCOPE** mouse-brain data end to end: load raw imagery + transcripts → QC against bulk RNAseq → **Scanpy** clustering (PCA / UMAP / Leiden) → cell-type mapping onto the Zeisel taxonomy → interactive **Observable** dashboards.
@@ -90,8 +92,12 @@ MERFISH/
 │       └── transcripts_genes_of_interest_v0.2.0.ipynb
 ├── scripts/
 │   ├── qc_figures.py                     # seaborn QC summary figure
-│   └── demo_pipeline.py                  # runnable synthetic pipeline demo
-└── assets/                               # hero map · QC · cell-type · demo figures
+│   ├── demo_pipeline.py                  # runnable synthetic pipeline demo
+│   └── live_test.py                      # pipeline on REAL public MERFISH data
+├── tests/
+│   └── test_pipeline.py                  # pytest: synthetic + live real-data
+├── pytest.ini
+└── assets/                               # hero · QC · cell-type · demo · live figures
 ```
 
 ## 🚀 Quick start
@@ -120,6 +126,20 @@ python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png  +  assets/de
 <p align="center"><img src="assets/demo_spatial_squidpy.png" width="430"/></p>
 
 <sub><b>squidpy</b> neighborhood enrichment on the same cells — strong positive self-enrichment (diagonal), depleted off-diagonal — the spatial question MERFISH coordinates uniquely let you ask. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
+
+## ✅ Tested on real data
+
+The pipeline isn't only demoed — it's **validated by a `pytest` suite**, including a *live* test that downloads a real MERFISH dataset ([Moffitt et al. 2018](https://www.science.org/doi/10.1126/science.aau5324), mouse hypothalamic preoptic region — 73,626 cells × 160 genes, via `squidpy.datasets`) and checks that unsupervised Leiden clustering **recovers the authors' published cell types**.
+
+![Live validation on real MERFISH data](assets/live_merfish.png)
+
+<sub>Unsupervised Leiden (27 clusters) vs the 16 published cell classes: concordant UMAP structure, real anatomy in a single coronal slice (third ventricle visible), and a near-diagonal concordance heatmap — <b>Adjusted Rand Index = 0.28</b> vs ~0 for random labels. Generated live by <a href="scripts/live_test.py"><code>scripts/live_test.py</code></a>.</sub>
+
+```bash
+pip install scanpy squidpy leidenalg igraph seaborn pytest
+pytest                    # 3 passed — 2 offline (synthetic) + 1 live (real MERFISH)
+pytest -m "not live"      # offline only (skips the network download)
+```
 
 ## 🌐 Spatial transcriptomics in context
 
@@ -161,6 +181,7 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 ## 📖 References
 
 - [Chen et al. (2015), *Science* — MERFISH founding paper](https://www.science.org/doi/10.1126/science.aaa6090)
+- [Moffitt et al. (2018), *Science* — hypothalamus MERFISH](https://www.science.org/doi/10.1126/science.aau5324) (the real dataset used in the live test)
 - [Zeisel et al. (2018), *Cell* — Molecular Architecture of the Mouse Nervous System](https://www.sciencedirect.com/science/article/pii/S009286741830789X) (the cell-type reference used here)
 - [Zhang et al. (2023), *Nature* — whole mouse-brain MERFISH atlas](https://www.nature.com/articles/s41586-023-06808-9)
 - [Yao et al. (2023), *Nature* — Allen Brain Cell Atlas of the whole mouse brain](https://www.nature.com/articles/s41586-023-06812-z)
