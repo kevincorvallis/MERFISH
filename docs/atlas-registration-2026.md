@@ -278,8 +278,9 @@ the real engines wire in behind the same interface (the `celltype_mapping.py` pa
 **Real Allen CCFv3 loads + the core runs on it (validated).** `load_ccf_brainglobe` pulls the
 real CCFv3 via `brainglobe-atlasapi` — **670 leaf regions in the volume / 841 in the ontology**
 — and, crucially, **NumPy stayed at 2.4.6** (brainglobe did *not* downgrade it, confirming the
-"brainglobe over legacy `allensdk`" recommendation in §3). Heavy deps live in an isolated
-`.venv-reg` so a resolve can't perturb the working pipeline.
+"brainglobe over legacy `allensdk`" recommendation in §3). STalign LDDMM now runs in the same
+unified env (installed with `--no-deps` to bypass upstream's stale numpy pin; `np2typing` replaces
+`nptyping` for numpy-2 compatibility).
 
 **Hierarchical roll-up is required for usable per-cell labels — and the calibrated confidence
 holds at every granularity.** A single section cannot resolve 670 leaf regions; `depth=` rolls
@@ -310,8 +311,23 @@ STalign recovers the section's anterior–posterior position to **46.7 µm (< 0.
 **0.89** of per-cell region labels at depth-3 — a *real* diffeomorphic fit, ground-truthed. Covered
 by the live test `test_stalign_recovers_known_ccf_slice` and
 [`scripts/stalign_demo.py`](../scripts/stalign_demo.py); figure
-[`assets/atlas_registration_stalign.png`](../assets/atlas_registration_stalign.png). STalign pins
-`numpy<1.24`, so it lives in an isolated env (the repo runs numpy 2.4).
+[`assets/atlas_registration_stalign.png`](../assets/atlas_registration_stalign.png). Upstream
+STalign still lists `numpy==1.23.4` in `requirements.txt`, but the code runs on numpy 2.4 when
+installed with `--no-deps` and `np2typing` (see README).
+
+**Auto AP-anchor — fixing STalign's init-sensitivity (`coarse_ap_search`).** STalign's 2D→3D fit is
+sensitive to its starting plane: from the default init a *posterior* thalamic section (AP 80)
+misconverged to the wrong AP basin (**AP error ~1.44 mm, thalamus IoU 0.23**). The recommended
+architecture has DeepSlice supply the affine anchor; since DeepSlice needs trained models +
+brightfield section images, `coarse_ap_search` is a **training-free** stand-in — it slides the
+section against every CCF coronal plane by normalized cross-correlation, picks the best-matching AP,
+and `stalign_register(init="auto")` feeds it to LDDMM as the initial translation. That recovers the
+same posterior section to **AP error ~148 µm (< 1.5 voxel), thalamus IoU 0.68** — a ~10× AP-error
+reduction. Across three thalamic scans (AP 64 / 72 / 80) all now align (AP error ≤ 157 µm, thalamus
+IoU 0.68–0.83); see [`scripts/thalamus_stalign_demo.py`](../scripts/thalamus_stalign_demo.py),
+[`assets/thalamus_stalign_alignment.png`](../assets/thalamus_stalign_alignment.png), offline unit
+tests in [`tests/test_atlas_init.py`](../tests/test_atlas_init.py), and the live test
+`test_stalign_autoinit_recovers_posterior_scan`.
 
 > **Honest scope:** the calibration/QC numbers in the table use a *synthetic anchoring error* on
 > real CCF geometry (ground truth known) and synthetic region-conditioned "cell types" for the QC
