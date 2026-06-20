@@ -130,16 +130,41 @@ class PlaneRegistration:
         return PlaneRegistration(self.plane.perturb(rng, angle_deg=angle_deg, shift=shift))
 
 
-def deepslice_anchor(*_args, **_kwargs):  # pragma: no cover - optional heavy backend
-    """Stage 1: run DeepSlice to estimate the CCF anchoring (O/U/V) + cut angle of a section.
+def deepslice_anchor(image_dir=None, species: str = "mouse", ensemble: bool = True,
+                     section_numbers: bool = True, propagate_angles: bool = True) -> dict:
+    """Stage 1 (production anchor): run the real **DeepSlice** on a folder of section images to
+    estimate each section's CCF anchoring (O/U/V) + cut angle, returned as
+    ``{filename: AnchoredPlane}`` via :func:`anchoring_to_plane`. Feed those planes to STalign as
+    the affine init (``stalign_register(..., init=None, L=..., T=...)``) or use them directly for
+    label transfer — the learned counterpart to :func:`coarse_anchor`.
 
-    DeepSlice is coronal-only and brightfield-best — render the section's DAPI / transcript
-    density as a grayscale image first. Install ``DeepSlice`` and call ``DSModel('mouse')``;
-    convert its QuickNII anchoring vectors into an ``AnchoredPlane``. See
-    docs/atlas-registration-2026.md §1."""
-    raise NotImplementedError(
-        "Install DeepSlice ('pip install DeepSlice') and convert its QuickNII anchoring "
-        "(Oxyz/Uxyz/Vxyz) into an AnchoredPlane; see docs/atlas-registration-2026.md §1.")
+    DeepSlice is **coronal-only** and **brightfield-best** — render fluorescence MERFISH as a
+    DAPI / transcript-density grayscale first. Wired but optional: needs ``DeepSlice`` installed
+    and a directory of section images (the "once section images are available" path). See docs §1."""
+    import os
+
+    try:
+        from DeepSlice import DSModel
+    except ImportError as e:  # pragma: no cover - optional heavy backend
+        raise NotImplementedError(
+            "Install DeepSlice ('pip install DeepSlice') and pass a folder of coronal section "
+            "images (brightfield / DAPI grayscale); see docs/atlas-registration-2026.md §1.") from e
+    if image_dir is None or not os.path.isdir(image_dir):  # pragma: no cover - needs real images
+        raise NotImplementedError(f"section-image directory not found: {image_dir}")
+
+    model = DSModel(species)  # pragma: no cover - needs DeepSlice + images
+    model.predict(image_dir, ensemble=ensemble, section_numbers=section_numbers)
+    if propagate_angles:
+        model.propagate_angles()
+    df = getattr(model, "predictions", None)
+    if df is None:
+        df = model.predicted_angles
+    cols = ["ox", "oy", "oz", "ux", "uy", "uz", "vx", "vy", "vz"]
+    planes = {}
+    for name, row in df.iterrows():
+        key = row["Filenames"] if "Filenames" in df.columns else name
+        planes[key] = anchoring_to_plane([float(row[c]) for c in cols])
+    return planes
 
 
 class STalignRegistration:
@@ -214,6 +239,58 @@ def coarse_ap_search(reference, resolution, section_img, x_axis, y_axis):
     return int(np.argmax(ncc)), ncc
 
 
+def coarse_anchor(reference, resolution, section_img, x_axis, y_axis,
+                  scales=(0.85, 1.0, 1.15), thetas_deg=(-15.0, 0.0, 15.0)) -> dict:
+    """Affine-anchoring search over **AP plane + in-plane scale + rotation** (generalizes
+    ``coarse_ap_search``), by normalized cross-correlation. For real sections whose scale or
+    orientation differ from the atlas — tissue shrinkage, magnification, arbitrary mounting angle.
+    Returns ``{"ap", "scale", "theta_deg", "ncc"}``. Cost ≈ ``len(scales)·len(thetas)·n_AP`` NCC
+    evals — keep the grids coarse for routine use; widen them for badly off-scale/rotated sections."""
+    from scipy.ndimage import map_coordinates
+
+    ref = np.asarray(reference, dtype=float)
+    res = np.asarray(resolution, dtype=float)
+    nz, ny, nx = ref.shape
+    y0, x0 = -(ny - 1) * res[1] / 2.0, -(nx - 1) * res[2] / 2.0
+    Y = np.asarray(y_axis, dtype=float)
+    X = np.asarray(x_axis, dtype=float)
+    yy, xx = np.meshgrid(Y, X, indexing="ij")
+    cy, cx = float(Y.mean()), float(X.mean())
+    dy, dx = yy - cy, xx - cx
+    sec = np.asarray(section_img, dtype=float)
+    sec = (sec - sec.mean()) / (sec.std() + 1e-12)
+
+    best = {"ncc": -2.0, "ap": nz // 2, "scale": 1.0, "theta_deg": 0.0}
+    for s in scales:
+        for th in thetas_deg:
+            t = np.deg2rad(th)
+            ct, st = np.cos(t), np.sin(t)
+            ay = cy + (ct * dy - st * dx) / s          # rotate + scale the sampling grid
+            ax = cx + (st * dy + ct * dx) / s
+            coords = np.stack([((ay - y0) / res[1]).ravel(), ((ax - x0) / res[2]).ravel()])
+            for ap in range(nz):
+                v = map_coordinates(ref[ap], coords, order=1, mode="constant").reshape(sec.shape)
+                sd = v.std()
+                if sd > 1e-9:
+                    ncc = float(np.mean(sec * (v - v.mean()) / sd))
+                    if ncc > best["ncc"]:
+                        best = {"ncc": ncc, "ap": int(ap), "scale": float(s),
+                                "theta_deg": float(th)}
+    return best
+
+
+def anchoring_to_plane(anchoring) -> "AnchoredPlane":
+    """Convert a QuickNII/DeepSlice 9-value anchoring (Ox,Oy,Oz, Ux,Uy,Uz, Vx,Vy,Vz) into an
+    ``AnchoredPlane``. DeepSlice's convention is exactly ours: a fractional image coordinate
+    (fx across width, fy down height) maps to ``O + fx*U + fy*V`` (= ``AnchoredPlane.to_ccf``).
+    O/U/V are in the atlas voxel space DeepSlice predicts in — rescale to your target atlas if it
+    differs in resolution/orientation."""
+    a = np.asarray(anchoring, dtype=float).ravel()
+    if a.size != 9:
+        raise ValueError("anchoring must be 9 values: Ox,Oy,Oz, Ux,Uy,Uz, Vx,Vy,Vz")
+    return AnchoredPlane(a[0:3], a[3:6], a[6:9])
+
+
 def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float = 200.0,
                      nt: int = 3, blur: float = 1.0, device: str = "cpu", init: str = "auto",
                      init_scale: float = 0.95, **lddmm):
@@ -225,7 +302,7 @@ def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float
 
     ``reference``  3D grayscale atlas volume (e.g. brainglobe ``bg.reference``);
     ``resolution`` (dz, dy, dx) microns/voxel; ``cells_xy`` (N, 2) section coords (x, y microns).
-    ``init="auto"`` first runs ``coarse_ap_search`` to anchor the AP plane (then LDDMM refines) —
+    ``init="auto"`` first runs ``coarse_anchor`` (AP + in-plane scale/rotation) to anchor it (then LDDMM refines) —
     this fixes the init-sensitivity; pass ``init=None`` or an explicit ``T=`` for STalign's default.
 
     NOTE: upstream STalign pins stale deps in ``requirements.txt`` — install with ``--no-deps``
@@ -250,12 +327,16 @@ def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float
     xJ = [Y_, X_]
     J = W[None] / np.mean(np.abs(W))
 
-    # affine anchor: localize the section's AP plane (DeepSlice-style stage 1) so LDDMM starts in
+    # affine anchor: localize AP + in-plane scale/rotation (DeepSlice-style stage 1) so LDDMM starts in
     # the right basin — fixes init-sensitivity (posterior sections otherwise converge to a wrong AP)
     if init == "auto" and "T" not in lddmm:
-        best_ap, _ = coarse_ap_search(ref, dxA, W, X_, Y_)
-        lddmm.setdefault("L", np.eye(3) * init_scale)
-        lddmm.setdefault("T", np.array([-xA[0][best_ap], 0.0, 0.0]))
+        anchor = coarse_anchor(ref, dxA, W, X_, Y_)
+        t = np.deg2rad(anchor["theta_deg"])
+        ct, st, sc = np.cos(t), np.sin(t), anchor["scale"]
+        lddmm.setdefault("L", np.array([[init_scale, 0.0, 0.0],
+                                        [0.0, sc * ct, -sc * st],
+                                        [0.0, sc * st, sc * ct]]))
+        lddmm.setdefault("T", np.array([-xA[0][anchor["ap"]], 0.0, 0.0]))
 
     out = ST.LDDMM_3D_to_slice(xA, I, xJ, J, nt=nt, niter=niter, a=a, device=device, **lddmm)
     return STalignRegistration(out["xv"], out["v"], out["A"], X_, Y_, float(dxA[-1]), xA, dxA)

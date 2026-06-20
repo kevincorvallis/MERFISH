@@ -329,6 +329,19 @@ IoU 0.68–0.83); see [`scripts/thalamus_stalign_demo.py`](../scripts/thalamus_s
 tests in [`tests/test_atlas_init.py`](../tests/test_atlas_init.py), and the live test
 `test_stalign_autoinit_recovers_posterior_scan`.
 
+**Scale + rotation anchor, and the production DeepSlice (extensions).** `coarse_ap_search` is
+generalized by **`coarse_anchor`**, which also grid-searches **in-plane scale and rotation** (NCC
+over AP × scale × θ) — for real sections that differ in magnification or mounting angle from the
+atlas — and builds the STalign init affine (in-plane scale + rotation, AP translation).
+`stalign_register(init="auto")` now uses it; on a deliberately **1.25×-scaled** real section it
+recovers **scale = 1.25** while keeping the AP within 1 voxel (unscaled → 1.0), with no regression
+to the posterior recovery above. For the **production** anchor, **`deepslice_anchor(image_dir)`**
+runs the real **DeepSlice** on a folder of coronal brightfield/DAPI-grayscale section images and
+converts its QuickNII `O/U/V` output to `AnchoredPlane`s via **`anchoring_to_plane`** — wired and
+guarded (raises with install hints until DeepSlice + section images are available, the "once images
+are available" path). Both are covered by offline tests in
+[`tests/test_atlas_init.py`](../tests/test_atlas_init.py).
+
 > **Honest scope:** the calibration/QC numbers in the table use a *synthetic anchoring error* on
 > real CCF geometry (ground truth known) and synthetic region-conditioned "cell types" for the QC
 > signal — they validate the geometry + label-transfer + UQ + QC layers, not a registration
