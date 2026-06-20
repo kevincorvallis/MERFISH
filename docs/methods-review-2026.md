@@ -29,6 +29,15 @@ Everything else below is supporting context or a medium-confidence add-on.
 
 `high confidence (3-0)`
 
+> 🔬 **Demonstrated** in [`scripts/segmentation_demo.py`](../scripts/segmentation_demo.py)
+> (tests in `tests/test_segmentation.py`). On simulated molecule-level data with known
+> ground truth, the modern **transcript-aware** paradigm (Baysor/proseg/segger-style)
+> beats the Voronoi/expansion baseline on transcript-assignment accuracy (**0.76** vs
+> **0.70**) and downstream Leiden ARI (**1.00** vs **0.96**) — directly reproducing the
+> "Segmentation Matters" finding. A guarded `cellpose_sam_segment()` hook runs the genuine
+> Cellpose-SAM on real DAPI mosaics; production swap on real MERSCOPE output is
+> `proseg --merscope`.
+
 Segmentation sits *upstream* of your entire `PCA → UMAP → Leiden → cell-type mapping`
 flow, and your pipeline currently inherits Vizgen's default Cellpose boundaries (or the
 prebuilt cell-by-gene matrix). Four new generalist methods explicitly support
@@ -195,8 +204,9 @@ worth a dedicated follow-up:
 1. ✅ **MapMyCells-style re-mapping** — *done* (`scripts/celltype_mapping.py`): the
    algorithm, validated on real data, beating the cosine heuristic with added confidence.
    Remaining: point it at the genuine ABC Atlas WMB reference via `cell_type_mapper`.
-2. **Cellpose-SAM** as the first segmentation experiment (drop-in via VPT), then compare
-   ARI/cluster structure against your current boundaries on the live test.
+2. 🔬 **Segmentation swap** — *demonstrated* (`scripts/segmentation_demo.py`): transcript
+   -aware beats the morphology baseline downstream. Remaining: run the genuine Cellpose-SAM
+   (`cellpose>=4`) / `proseg --merscope` on real MERSCOPE mosaics + transcripts.
 3. **proseg `--merscope`** if you want a fully transcript-aware re-segmentation and are
    willing to move the entry point to `detected_transcripts`.
 4. **SPLIT** only if spillover proves to be a real problem in your data (needs R interop).

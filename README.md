@@ -7,7 +7,7 @@
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
-![tests](https://img.shields.io/badge/tests-8%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-12%20passed-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 **MERFISH** images individual RNA molecules *in situ* — reading out hundreds of genes per cell while keeping each transcript's exact position in intact tissue. This repo analyzes Vizgen **MERSCOPE** mouse-brain data end to end: load raw imagery + transcripts → QC against bulk RNAseq → **Scanpy** clustering (PCA / UMAP / Leiden) → cell-type mapping onto the Zeisel taxonomy → interactive **Observable** dashboards.
@@ -110,10 +110,12 @@ MERFISH/
 │   ├── qc_figures.py                     # seaborn QC summary figure
 │   ├── demo_pipeline.py                  # runnable synthetic pipeline demo
 │   ├── celltype_mapping.py               # principled MapMyCells-style mapping (2026)
+│   ├── segmentation_demo.py              # transcript-aware segmentation swap (2026)
 │   └── live_test.py                      # pipeline on REAL public MERFISH data
 ├── tests/
 │   ├── test_pipeline.py                  # pytest: synthetic + live real-data
-│   └── test_mapping.py                   # pytest: principled mapping + calibration
+│   ├── test_mapping.py                   # pytest: principled mapping + calibration
+│   └── test_segmentation.py              # pytest: segmentation changes clustering
 ├── docs/
 │   └── methods-review-2026.md            # 2025–26 methods review (cited, verified)
 ├── pytest.ini
@@ -147,6 +149,26 @@ python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png  +  assets/de
 
 <sub><b>squidpy</b> neighborhood enrichment on the same cells — strong positive self-enrichment (diagonal), depleted off-diagonal — the spatial question MERFISH coordinates uniquely let you ask. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
 
+## 🔬 Segmentation matters (2026 upgrade)
+
+Cell segmentation sits *upstream* of the whole pipeline — it builds the cell-by-gene matrix that PCA/UMAP/Leiden and cell-type mapping consume — and the 2025 [*Segmentation Matters*](https://www.biorxiv.org/content/10.1101/2025.08.25.672145v1) benchmark showed the method you pick measurably splits, merges, or drops downstream clusters. The production-ready, MERSCOPE-native tools are **proseg** (`proseg --merscope`), **Cellpose-SAM**, **RNA2seg**, and **segger** (see [methods review §1](docs/methods-review-2026.md)).
+
+[`scripts/segmentation_demo.py`](scripts/segmentation_demo.py) makes the case end to end on simulated molecule-level data with known ground truth — comparing the vendor-default-style baseline against the modern **transcript-aware** paradigm (Baysor/proseg/segger-style: assign each molecule by position *and* expression likelihood):
+
+| Segmentation | Transcript-assignment acc. | Downstream Leiden ARI |
+|---|---|---|
+| nucleus-only | 0.17 | 0.95 |
+| Voronoi / expansion (vendor-default-style) | 0.70 | 0.96 |
+| **transcript-aware (modern)** | **0.76** | **1.00** |
+
+![Segmentation changes downstream cell types](assets/segmentation_demo.png)
+
+<sub>Transcript-aware segmentation rescues boundary molecules the Voronoi baseline misassigns (green, bottom-right) and recovers the true cell types perfectly downstream. <em>Data is simulated; the segmentation methods, pipeline, and metrics are real.</em> A guarded <code>cellpose_sam_segment()</code> hook runs the genuine Cellpose-SAM on real DAPI mosaics when <code>cellpose>=4</code> is installed.</sub>
+
+```bash
+python scripts/segmentation_demo.py --fig
+```
+
 ## ✅ Tested on real data
 
 The pipeline isn't only demoed — it's **validated by a `pytest` suite**, including a *live* test that downloads a real MERFISH dataset ([Moffitt et al. 2018](https://www.science.org/doi/10.1126/science.aau5324), mouse hypothalamic preoptic region — 73,626 cells × 160 genes, via `squidpy.datasets`) and checks that unsupervised Leiden clustering **recovers the authors' published cell types**.
@@ -157,7 +179,7 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 
 ```bash
 pip install scanpy squidpy leidenalg igraph seaborn pytest
-pytest                    # 8 passed — 6 offline (synthetic) + 2 live (real MERFISH)
+pytest                    # 12 passed — 10 offline (synthetic) + 2 live (real MERFISH)
 pytest -m "not live"      # offline only (skips the network download)
 ```
 
@@ -191,6 +213,7 @@ MERFISH — the chemistry behind Vizgen's MERSCOPE and the basis for this repo's
 
 High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing scope:
 
+- **Modern cell segmentation** — ✅ *demonstrated* in [`scripts/segmentation_demo.py`](scripts/segmentation_demo.py): transcript-aware segmentation (Baysor/proseg/segger-style) beats Voronoi on assignment (`0.76` vs `0.70`) and downstream ARI (`1.00` vs `0.96`). Production: `proseg --merscope` / Cellpose-SAM on raw MERSCOPE output.
 - **Spatial statistics & niche enrichment** — `squidpy` for spatial neighbor graphs, neighborhood enrichment, and co-occurrence *(shown in the runnable demo above)*.
 - **Spatial domain discovery** — `CellCharter` for batch-aware spatial niches across samples.
 - **Spatially variable genes** — Moran's I (`squidpy.gr.spatial_autocorr`), `SpatialDE`, or `SPARK-X`; cross-validate, since no method is canonical.
