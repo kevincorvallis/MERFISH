@@ -1,6 +1,6 @@
 """Segmentation swap — why the segmentation method changes your cell types.
 
-The 2026 methods review (docs/methods-review-2026.md §1) flagged cell segmentation as the
+The methods review flagged cell segmentation as the
 highest-leverage upstream change: it produces the cell-by-gene matrix that feeds
 ``PCA -> UMAP -> Leiden -> cell-type mapping``, and the 2025 "Segmentation Matters"
 benchmark showed the choice measurably splits/merges/drops downstream clusters.
@@ -23,7 +23,7 @@ pipeline, and reports both transcript-assignment accuracy and downstream Leiden 
 ground-truth cell types — demonstrating that better segmentation yields cleaner cell types.
 
 For real data, swap in the genuine tools (see ``cellpose_sam_segment`` and
-docs/methods-review-2026.md §1). Usage:
+the README). Usage:
     python scripts/segmentation_demo.py --fig
 """
 
@@ -144,12 +144,12 @@ def cellpose_sam_segment(image: np.ndarray, diameter: float | None = None) -> np
 
     Cellpose-SAM (Cellpose 4.x, SAM ViT-L backbone) is the vendor-endorsed swap for the
     default MERSCOPE Cellpose model. Guarded so the demo/CI runs without the heavy torch
-    dependency; install ``cellpose>=4`` to enable. See docs/methods-review-2026.md §1.
+    dependency; install ``cellpose>=4`` to enable. See the README.
     """
     if not has_cellpose():
         raise NotImplementedError(
             "Install cellpose>=4 (Cellpose-SAM) to run image-based segmentation; "
-            "see docs/methods-review-2026.md §1. The transcript-aware demo needs no torch.")
+            "see the README. The transcript-aware demo needs no torch.")
     from cellpose import models  # pragma: no cover - optional heavy path
     model = models.CellposeModel(gpu=False)
     masks, _, _ = model.eval(image, diameter=diameter)

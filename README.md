@@ -66,9 +66,9 @@ After clustering, each Leiden cluster is matched to the [Zeisel et al.](http://m
 
 </details>
 
-## 🎯 Principled cell-type mapping (2026 upgrade)
+## 🎯 Principled cell-type mapping
 
-The mapping above is a heuristic — shared-PCA + cosine to the Zeisel taxonomy. Following the [2026 methods review](docs/methods-review-2026.md), [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py) implements the **MapMyCells / Allen `cell_type_mapper` algorithm** — marker-gene correlation with **bootstrap confidence** — and validates it on a held-out split of the real Moffitt data.
+The mapping above is a heuristic — shared-PCA + cosine to the Zeisel taxonomy. [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py) implements the **MapMyCells / Allen `cell_type_mapper` algorithm** — marker-gene correlation with **bootstrap confidence** — and validates it on a held-out split of the real Moffitt data.
 
 - 📈 **More accurate** — recovers the published `Cell_class` at **`0.77`** vs **`0.71`** for the cosine heuristic (held-out, 36,828 cells).
 - 🎚️ **Confidence-scored** — every call gets a calibrated bootstrap confidence (mean **`0.87`**); confident calls are measurably more accurate, where the cosine method gives no confidence at all.
@@ -109,15 +109,13 @@ MERFISH/
 ├── scripts/
 │   ├── qc_figures.py                     # seaborn QC summary figure
 │   ├── demo_pipeline.py                  # runnable synthetic pipeline demo
-│   ├── celltype_mapping.py               # principled MapMyCells-style mapping (2026)
-│   ├── segmentation_demo.py              # transcript-aware segmentation swap (2026)
+│   ├── celltype_mapping.py               # principled MapMyCells-style cell-type mapping
+│   ├── segmentation_demo.py              # transcript-aware segmentation swap
 │   └── live_test.py                      # pipeline on REAL public MERFISH data
 ├── tests/
 │   ├── test_pipeline.py                  # pytest: synthetic + live real-data
 │   ├── test_mapping.py                   # pytest: principled mapping + calibration
 │   └── test_segmentation.py              # pytest: segmentation changes clustering
-├── docs/
-│   └── methods-review-2026.md            # 2025–26 methods review (cited, verified)
 ├── pytest.ini
 └── assets/                               # hero · QC · cell-type · mapping · demo · live
 ```
@@ -149,9 +147,9 @@ python scripts/demo_pipeline.py      # -> assets/demo_pipeline.png  +  assets/de
 
 <sub><b>squidpy</b> neighborhood enrichment on the same cells — strong positive self-enrichment (diagonal), depleted off-diagonal — the spatial question MERFISH coordinates uniquely let you ask. <em>Data is synthetic; the pipeline and plots are real.</em></sub>
 
-## 🔬 Segmentation matters (2026 upgrade)
+## 🔬 Segmentation matters
 
-Cell segmentation sits *upstream* of the whole pipeline — it builds the cell-by-gene matrix that PCA/UMAP/Leiden and cell-type mapping consume — and the 2025 [*Segmentation Matters*](https://www.biorxiv.org/content/10.1101/2025.08.25.672145v1) benchmark showed the method you pick measurably splits, merges, or drops downstream clusters. The production-ready, MERSCOPE-native tools are **proseg** (`proseg --merscope`), **Cellpose-SAM**, **RNA2seg**, and **segger** (see [methods review §1](docs/methods-review-2026.md)).
+Cell segmentation sits *upstream* of the whole pipeline — it builds the cell-by-gene matrix that PCA/UMAP/Leiden and cell-type mapping consume — and the 2025 [*Segmentation Matters*](https://www.biorxiv.org/content/10.1101/2025.08.25.672145v1) benchmark showed the method you pick measurably splits, merges, or drops downstream clusters. The production-ready, MERSCOPE-native tools are **proseg** (`proseg --merscope`), **Cellpose-SAM**, **RNA2seg**, and **segger**.
 
 [`scripts/segmentation_demo.py`](scripts/segmentation_demo.py) makes the case end to end on simulated molecule-level data with known ground truth — comparing the vendor-default-style baseline against the modern **transcript-aware** paradigm (Baysor/proseg/segger-style: assign each molecule by position *and* expression likelihood):
 
@@ -233,8 +231,6 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - [Kleshchevnikov et al. (2022), *Nat Biotechnol* — cell2location](https://doi.org/10.1038/s41587-021-01139-4)
 - [Wang et al. (2025), *Nat Commun* — benchmarking imaging spatial platforms](https://www.nature.com/articles/s41467-025-64990-y)
 - [Allen Institute — MapMyCells / `cell_type_mapper`](https://github.com/AllenInstitute/cell_type_mapper) (the principled mapping algorithm implemented in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py))
-- [**Methods review (2025–26)**](docs/methods-review-2026.md) — newest segmentation, mapping & platform methods for this pipeline, with verified citations
-
 ## 🙏 Credits
 
 Built on [Vizgen MERSCOPE](https://vizgen.com), the [Zeisel et al.](http://mousebrain.org) scRNAseq taxonomy, [Scanpy](https://scanpy.readthedocs.io), [Clustergrammer2](https://clustergrammer.readthedocs.io), and Observable. Released under the **MIT License**.

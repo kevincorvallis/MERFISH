@@ -1,7 +1,7 @@
 """Principled, confidence-scored cell-type mapping for MERFISH data.
 
-This is the upgrade the 2026 methods review flagged as the lowest-friction, highest
--payoff change for this pipeline (see ``docs/methods-review-2026.md`` §2): replace the
+This is the upgrade the methods review flagged as the lowest-friction, highest
+-payoff change for this pipeline (see the README): replace the
 heuristic *shared-PCA + cosine* label transfer onto the Zeisel taxonomy with the
 **MapMyCells / Allen ``cell_type_mapper`` algorithm** — marker-gene correlation with
 **bootstrap confidence**.
@@ -19,7 +19,7 @@ Why it's better than the cosine heuristic:
 This reimplements the *algorithm* so it runs with no Allen reference download — it builds
 the reference from any labelled AnnData. To use the genuine package against the
 whole-mouse-brain atlas instead, see ``map_with_cell_type_mapper`` below and
-``docs/methods-review-2026.md`` for the ABC Atlas WMB reference (CCN20230722).
+the README for the ABC Atlas WMB reference (CCN20230722).
 
 Usage:
     pip install scanpy squidpy scikit-learn seaborn
@@ -244,12 +244,12 @@ def map_with_cell_type_mapper(*_args, **_kwargs):  # pragma: no cover - optional
     Atlas whole-mouse-brain reference (CCN20230722).
 
     Install ``cell-type-mapper`` and download the WMB precomputed-stats reference, then
-    call ``cell_type_mapper.cli.from_specified_markers``. See docs/methods-review-2026.md.
+    call ``cell_type_mapper.cli.from_specified_markers``. See the README.
     This native module exists so the upgrade runs in CI without that multi-GB download.
     """
     raise NotImplementedError(
         "Install the Allen 'cell-type-mapper' package and the ABC Atlas WMB reference; "
-        "see docs/methods-review-2026.md §2.")
+        "see the README.")
 
 
 # --- data + figure -----------------------------------------------------------

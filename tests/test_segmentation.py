@@ -1,6 +1,6 @@
 """Tests for the segmentation-swap demo (segmentation_demo).
 
-Operationalizes the verified 2025 finding (docs/methods-review-2026.md §1, "Segmentation
+Operationalizes the verified 2025 finding ("Segmentation
 Matters"): the segmentation method that produces the cell-by-gene matrix measurably
 changes downstream Leiden clustering. We simulate molecule-level MERFISH data with known
 ground truth and show a modern **transcript-aware** segmentation (Baysor/proseg-style:
