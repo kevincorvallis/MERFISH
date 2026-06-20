@@ -245,7 +245,7 @@ def map_with_cell_type_mapper(*_args, **_kwargs):  # pragma: no cover - optional
 
     Install ``cell-type-mapper`` and download the WMB precomputed-stats reference, then
     call ``cell_type_mapper.cli.from_specified_markers``. See the README.
-    This native module exists so the upgrade runs in CI without that multi-GB download.
+    This native reimplementation runs in offline pytest without that multi-GB download.
     """
     raise NotImplementedError(
         "Install the Allen 'cell-type-mapper' package and the ABC Atlas WMB reference; "

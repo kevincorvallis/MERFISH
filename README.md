@@ -7,10 +7,17 @@
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
-![tests](https://img.shields.io/badge/tests-12%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-20%20offline%20%2F%2025%20total-brightgreen)
+![CI](https://github.com/kevincorvallis/MERFISH/actions/workflows/test.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 **MERFISH** images individual RNA molecules *in situ* — reading out hundreds of genes per cell while keeping each transcript's exact position in intact tissue. This repo analyzes Vizgen **MERSCOPE** mouse-brain data end to end: load raw imagery + transcripts → QC against bulk RNAseq → **Scanpy** clustering (PCA / UMAP / Leiden) → cell-type mapping onto the Zeisel taxonomy → interactive **Observable** dashboards.
+
+> **Implementation status:** the Scanpy pipeline, principled cell-type mapper, segmentation
+> benchmark, and atlas-registration **core** (geometry + label transfer + calibrated UQ + QC) are
+> implemented and covered by offline pytest. Production backends that need large downloads or
+> isolated envs — Allen `cell_type_mapper`, DeepSlice, STalign, ANTs — are **stubbed** with
+> install hints. See [`docs/methods-review-2026.md`](docs/methods-review-2026.md).
 
 ![Spatial transcript-density map of a coronal mouse-brain section](assets/hero_coronal_brain_spatial_map.png)
 
@@ -111,22 +118,44 @@ MERFISH/
 │   ├── demo_pipeline.py                  # runnable synthetic pipeline demo
 │   ├── celltype_mapping.py               # principled MapMyCells-style cell-type mapping
 │   ├── segmentation_demo.py              # transcript-aware segmentation swap
+│   ├── atlas_registration.py             # 2D section → CCFv3 + per-cell region labels
 │   └── live_test.py                      # pipeline on REAL public MERFISH data
 ├── tests/
 │   ├── test_pipeline.py                  # pytest: synthetic + live real-data
 │   ├── test_mapping.py                   # pytest: principled mapping + calibration
-│   └── test_segmentation.py              # pytest: segmentation changes clustering
+│   ├── test_segmentation.py              # pytest: segmentation changes clustering
+│   └── test_atlas_registration.py        # pytest: registration geometry + calibration + QC
+├── docs/
+│   ├── methods-review-2026.md            # cell-type / segmentation / registration upgrades
+│   └── atlas-registration-2026.md        # 2D section → CCFv3 registration review (cited)
+├── requirements-dev.txt                  # slim deps for offline pytest
+├── LICENSE
+├── .github/workflows/test.yml            # offline pytest on push/PR (Python 3.11)
 ├── pytest.ini
 └── assets/                               # hero · QC · cell-type · mapping · demo · live
 ```
 
 ## 🚀 Quick start
 
+**Core env** (notebooks + offline tests):
+
 ```bash
-pip install scanpy leidenalg loompy clustergrammer2 observable_jupyter \
-            tifffile opencv-python h5py matplotlib seaborn pandas numpy scipy scikit-learn fsspec gcsfs
-jupyter lab        # open notebooks/showcase_mouse_brain.ipynb
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pip install leidenalg igraph loompy clustergrammer2 observable_jupyter \
+            tifffile opencv-python h5py matplotlib seaborn fsspec gcsfs
+jupyter lab        # open notebooks/broad_local_adaptation.ipynb
 ```
+
+**Optional extras** (install in separate envs when needed — some pin conflicting numpy versions):
+
+| Extra | Install | Used for |
+|---|---|---|
+| Live pytest + figures | `pip install squidpy leidenalg igraph seaborn` | `pytest` (live), `live_test.py`, `celltype_mapping.py --fig` |
+| Real Allen CCFv3 | `pip install brainglobe-atlasapi` | `atlas_registration.py --real` |
+| DeepSlice anchoring | `pip install DeepSlice` | `deepslice_anchor()` (stubbed) |
+| STalign deformable warp | isolated `.venv-reg` with `torch` + STalign | `stalign_register()` (stubbed; pins numpy&lt;1.24) |
+| Allen MapMyCells | `pip install cell-type-mapper` + WMB reference | `map_with_cell_type_mapper()` (stubbed) |
 
 Demo data (Vizgen public release): `gs://public-datasets-vizgen-merfish/datasets/mouse_brain_map/BrainReceptorShowcase/`. Point each notebook's `base_path` / `dataset_path` at your local copy or bucket — raw MERSCOPE output (`*.tif`, `*.hdf5`, large `*.csv`) is git-ignored. The QC notebook also needs Vizgen's proprietary `merlin` / `encoder.abundance` packages.
 
@@ -167,6 +196,49 @@ Cell segmentation sits *upstream* of the whole pipeline — it builds the cell-b
 python scripts/segmentation_demo.py --fig
 ```
 
+## 🗺️ Aligning a new scan to the Allen CCFv3
+
+The hardest part of a *new* section is **placing it in a common anatomical frame** — "which
+brain region is each cell in?" That is 2D-section → 3D-atlas registration.
+[`scripts/atlas_registration.py`](scripts/atlas_registration.py) implements the
+**backend-agnostic core** of the recommended pipeline — *DeepSlice affine anchor → STalign /
+ANTs deformable warp → per-cell annotation lift-over* — plus two things the surveyed tools
+leave out: **calibrated per-cell uncertainty** and a **QC cross-check**. Validated end to end
+on the **real Allen CCFv3** (loaded via `brainglobe-atlasapi`, NumPy-2 safe).
+
+- 🧭 **Oblique cut angles, natively** — the DeepSlice `O/U/V` anchoring represents an
+  obliquely-cut plane *exactly*, not approximated.
+- 🎚️ **Calibrated per-cell confidence** — a *registration ensemble* (perturb the fit within its
+  anchoring error, re-look-up, report the agreement fraction) gives each cell a confidence that
+  is measurably calibrated: on the real CCFv3, **high-confidence calls are ~98–99% accurate at
+  every ontology granularity** — so you pick the operating point (coarse for coverage, fine and
+  trust only confident cells). Same bootstrap idea as the cell-type mapper.
+- 🌳 **Hierarchical labels** — a single section can't resolve 670 CCF leaf regions; labels roll
+  up the ontology tree (`--depth`) to ~20–50 major structures for robust per-cell calls.
+- 🔬 **QC by orthogonal validation** — each region's cell-type composition vs the Allen ABC
+  reference (Jensen-Shannon); a section with implausible regions is flagged (QC `0.14 → 0.96`
+  under deliberate misregistration on the real CCFv3).
+
+> **Honest limitation:** validated accuracies use synthetic anchoring error on real CCF geometry
+> (ground truth known), not a real DeepSlice/STalign fit. DeepSlice / STalign / ANTs backends are
+> stubbed — see [`docs/atlas-registration-2026.md`](docs/atlas-registration-2026.md) § Implementation status.
+
+<p align="center">
+  <img src="assets/atlas_registration.png" width="49%"/>
+  <img src="assets/atlas_registration_ccfv3.png" width="49%"/>
+</p>
+
+<sub><b>Left:</b> synthetic labelled atlas (offline pytest). <b>Right:</b> the same pipeline on
+the <b>real Allen CCFv3</b> (depth-3, 16 regions in-section). Both: accuracy rises with ensemble
+confidence (calibrated), labels recover the coronal structure, confidence is low at region
+borders, correct calls concentrate at high confidence. The real engines (DeepSlice / STalign /
+ANTs) wire in behind the same interface — see [the cited review](docs/atlas-registration-2026.md).</sub>
+
+```bash
+python scripts/atlas_registration.py --fig                   # synthetic demo (no data needed)
+python scripts/atlas_registration.py --real --fig --depth 3  # real Allen CCFv3 (needs brainglobe-atlasapi)
+```
+
 ## ✅ Tested on real data
 
 The pipeline isn't only demoed — it's **validated by a `pytest` suite**, including a *live* test that downloads a real MERFISH dataset ([Moffitt et al. 2018](https://www.science.org/doi/10.1126/science.aau5324), mouse hypothalamic preoptic region — 73,626 cells × 160 genes, via `squidpy.datasets`) and checks that unsupervised Leiden clustering **recovers the authors' published cell types**.
@@ -176,9 +248,10 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 <sub>Unsupervised Leiden (27 clusters) vs the 16 published cell classes: concordant UMAP structure, real anatomy in a single coronal slice (third ventricle visible), and a near-diagonal concordance heatmap — <b>Adjusted Rand Index = 0.28</b> vs ~0 for random labels. Generated live by <a href="scripts/live_test.py"><code>scripts/live_test.py</code></a>.</sub>
 
 ```bash
-pip install scanpy squidpy leidenalg igraph seaborn pytest
-pytest                    # 12 passed — 10 offline (synthetic) + 2 live (real MERFISH)
-pytest -m "not live"      # offline only (skips the network download)
+pip install -r requirements-dev.txt
+pip install squidpy leidenalg igraph seaborn   # for live tests + figure scripts
+pytest -m "not live"      # 20 offline (synthetic) — no network needed
+pytest                    # + 5 live: real MERFISH download, CCFv3, STalign (optional deps)
 ```
 
 ## 🌐 Spatial transcriptomics in context
@@ -216,7 +289,8 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - **Spatial domain discovery** — `CellCharter` for batch-aware spatial niches across samples.
 - **Spatially variable genes** — Moran's I (`squidpy.gr.spatial_autocorr`), `SpatialDE`, or `SPARK-X`; cross-validate, since no method is canonical.
 - **Cell–cell communication** — `LIANA+` for spatially-resolved ligand–receptor inference on the cell-type map.
-- **Principled reference mapping** — ✅ **implemented** in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py): the MapMyCells-style marker-correlation + bootstrap-confidence algorithm (beats the cosine heuristic `0.77` vs `0.71` on held-out Moffitt cells, adds per-cell confidence). Next: run the genuine `cell_type_mapper` against the ABC Atlas WMB taxonomy, or `cell2location` / `Tangram` / `scANVI`.
+- **Principled reference mapping** — ✅ **core implemented** in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py): marker-correlation + bootstrap-confidence (beats cosine heuristic `0.77` vs `0.71`). Stub: genuine `cell_type_mapper` against ABC Atlas WMB taxonomy.
+- **Atlas registration & per-cell region labels** — ✅ **core implemented** in [`scripts/atlas_registration.py`](scripts/atlas_registration.py): geometry, label transfer, calibrated UQ + QC on real CCFv3. Stubbed: DeepSlice / STalign / ANTs engines — see [atlas-registration review](docs/atlas-registration-2026.md) (incl. limitations).
 - **Atlas integration & interchange** — migrate to `SpatialData`/Zarr and map onto the BICCN / Allen Brain Cell Atlas whole-mouse-brain MERFISH taxonomies.
 
 ## 📖 References
@@ -231,6 +305,11 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - [Kleshchevnikov et al. (2022), *Nat Biotechnol* — cell2location](https://doi.org/10.1038/s41587-021-01139-4)
 - [Wang et al. (2025), *Nat Commun* — benchmarking imaging spatial platforms](https://www.nature.com/articles/s41467-025-64990-y)
 - [Allen Institute — MapMyCells / `cell_type_mapper`](https://github.com/AllenInstitute/cell_type_mapper) (the principled mapping algorithm implemented in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py))
+- [Carey et al. (2023), *Nat Commun* — DeepSlice](https://www.nature.com/articles/s41467-023-41645-4) (automated 2D section → CCF affine anchoring + cut-angle estimation)
+- [Clifton et al. (2023), *Nat Commun* — STalign](https://www.nature.com/articles/s41467-023-43915-7) (LDDMM alignment of single-cell spatial data to the 3D CCF)
+- [**Methods review (2026)**](docs/methods-review-2026.md) — principled upgrades for cell-type mapping, segmentation, and registration
+- [**Atlas registration review (2026)**](docs/atlas-registration-2026.md) — 2D section → CCFv3 registration + per-cell region labels, with verified citations
+
 ## 🙏 Credits
 
 Built on [Vizgen MERSCOPE](https://vizgen.com), the [Zeisel et al.](http://mousebrain.org) scRNAseq taxonomy, [Scanpy](https://scanpy.readthedocs.io), [Clustergrammer2](https://clustergrammer.readthedocs.io), and Observable. Released under the **MIT License**.

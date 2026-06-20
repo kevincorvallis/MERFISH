@@ -55,7 +55,8 @@ sc.pp.scale(ad, max_value=10)
 sc.tl.pca(ad, svd_solver="arpack", n_comps=30)
 sc.pp.neighbors(ad, n_neighbors=15, n_pcs=30)
 sc.tl.umap(ad)
-sc.tl.leiden(ad, resolution=1.0)
+sc.tl.leiden(ad, resolution=1.0, flavor="igraph", n_iterations=2,
+             directed=False, random_state=0)
 n_leiden = ad.obs["leiden"].nunique()
 print(f"Leiden found {n_leiden} clusters from {K} simulated domains")
 

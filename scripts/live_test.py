@@ -67,7 +67,8 @@ def run_pipeline(ad, n_comps: int = 50, resolution: float = 1.0,
     sc.tl.pca(ad, n_comps=nc, svd_solver="arpack")
     sc.pp.neighbors(ad, n_neighbors=15, n_pcs=nc)
     sc.tl.umap(ad)
-    sc.tl.leiden(ad, resolution=resolution)
+    sc.tl.leiden(ad, resolution=resolution, flavor="igraph", n_iterations=2,
+                 directed=False, random_state=0)
 
     metrics = {
         "n_cells": int(ad.n_obs),
