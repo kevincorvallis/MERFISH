@@ -7,7 +7,7 @@
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
-![tests](https://img.shields.io/badge/tests-3%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-8%20passed-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 **MERFISH** images individual RNA molecules *in situ* — reading out hundreds of genes per cell while keeping each transcript's exact position in intact tissue. This repo analyzes Vizgen **MERSCOPE** mouse-brain data end to end: load raw imagery + transcripts → QC against bulk RNAseq → **Scanpy** clustering (PCA / UMAP / Leiden) → cell-type mapping onto the Zeisel taxonomy → interactive **Observable** dashboards.
@@ -66,6 +66,22 @@ After clustering, each Leiden cluster is matched to the [Zeisel et al.](http://m
 
 </details>
 
+## 🎯 Principled cell-type mapping (2026 upgrade)
+
+The mapping above is a heuristic — shared-PCA + cosine to the Zeisel taxonomy. Following the [2026 methods review](docs/methods-review-2026.md), [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py) implements the **MapMyCells / Allen `cell_type_mapper` algorithm** — marker-gene correlation with **bootstrap confidence** — and validates it on a held-out split of the real Moffitt data.
+
+- 📈 **More accurate** — recovers the published `Cell_class` at **`0.77`** vs **`0.71`** for the cosine heuristic (held-out, 36,828 cells).
+- 🎚️ **Confidence-scored** — every call gets a calibrated bootstrap confidence (mean **`0.87`**); confident calls are measurably more accurate, where the cosine method gives no confidence at all.
+- 🪜 **Hierarchical** — coarse class, then refine to fine neuron subtype (`Cell_class` → `Neuron_cluster_ID`): **`0.82`** subtype accuracy within correctly-called classes.
+
+![Principled cell-type mapping with calibrated confidence](assets/celltype_mapping.png)
+
+<sub>Held-out validation on real Moffitt 2018 hypothalamus MERFISH. <b>Top-left:</b> accuracy rises with confidence (calibrated). <b>Top-right:</b> correct calls concentrate at high confidence, errors at low. <b>Bottom-left:</b> truth ↔ predicted concordance. <b>Bottom-right:</b> a coronal slice colored by confidence — flags where the 161-gene panel can't resolve a type. The genuine <code>cell_type_mapper</code> against the <a href="https://alleninstitute.github.io/abc_atlas_access/">ABC Atlas</a> whole-mouse-brain taxonomy is the documented next step.</sub>
+
+```bash
+python scripts/celltype_mapping.py --fig --hierarchical   # real data + figure
+```
+
 ## 📓 Notebooks
 
 | Notebook | What it does |
@@ -93,11 +109,15 @@ MERFISH/
 ├── scripts/
 │   ├── qc_figures.py                     # seaborn QC summary figure
 │   ├── demo_pipeline.py                  # runnable synthetic pipeline demo
+│   ├── celltype_mapping.py               # principled MapMyCells-style mapping (2026)
 │   └── live_test.py                      # pipeline on REAL public MERFISH data
 ├── tests/
-│   └── test_pipeline.py                  # pytest: synthetic + live real-data
+│   ├── test_pipeline.py                  # pytest: synthetic + live real-data
+│   └── test_mapping.py                   # pytest: principled mapping + calibration
+├── docs/
+│   └── methods-review-2026.md            # 2025–26 methods review (cited, verified)
 ├── pytest.ini
-└── assets/                               # hero · QC · cell-type · demo · live figures
+└── assets/                               # hero · QC · cell-type · mapping · demo · live
 ```
 
 ## 🚀 Quick start
@@ -137,7 +157,7 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 
 ```bash
 pip install scanpy squidpy leidenalg igraph seaborn pytest
-pytest                    # 3 passed — 2 offline (synthetic) + 1 live (real MERFISH)
+pytest                    # 8 passed — 6 offline (synthetic) + 2 live (real MERFISH)
 pytest -m "not live"      # offline only (skips the network download)
 ```
 
@@ -175,7 +195,7 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - **Spatial domain discovery** — `CellCharter` for batch-aware spatial niches across samples.
 - **Spatially variable genes** — Moran's I (`squidpy.gr.spatial_autocorr`), `SpatialDE`, or `SPARK-X`; cross-validate, since no method is canonical.
 - **Cell–cell communication** — `LIANA+` for spatially-resolved ligand–receptor inference on the cell-type map.
-- **Principled reference mapping** — swap heuristic label transfer for `cell2location`, `Tangram`, or `scANVI` against an scRNA-seq reference.
+- **Principled reference mapping** — ✅ **implemented** in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py): the MapMyCells-style marker-correlation + bootstrap-confidence algorithm (beats the cosine heuristic `0.77` vs `0.71` on held-out Moffitt cells, adds per-cell confidence). Next: run the genuine `cell_type_mapper` against the ABC Atlas WMB taxonomy, or `cell2location` / `Tangram` / `scANVI`.
 - **Atlas integration & interchange** — migrate to `SpatialData`/Zarr and map onto the BICCN / Allen Brain Cell Atlas whole-mouse-brain MERFISH taxonomies.
 
 ## 📖 References
@@ -189,6 +209,8 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 - [Palla et al. (2022), *Nat Methods* — Squidpy](https://doi.org/10.1038/s41592-021-01358-2)
 - [Kleshchevnikov et al. (2022), *Nat Biotechnol* — cell2location](https://doi.org/10.1038/s41587-021-01139-4)
 - [Wang et al. (2025), *Nat Commun* — benchmarking imaging spatial platforms](https://www.nature.com/articles/s41467-025-64990-y)
+- [Allen Institute — MapMyCells / `cell_type_mapper`](https://github.com/AllenInstitute/cell_type_mapper) (the principled mapping algorithm implemented in [`scripts/celltype_mapping.py`](scripts/celltype_mapping.py))
+- [**Methods review (2025–26)**](docs/methods-review-2026.md) — newest segmentation, mapping & platform methods for this pipeline, with verified citations
 
 ## 🙏 Credits
 
