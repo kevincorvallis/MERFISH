@@ -30,14 +30,22 @@ flowchart LR
 
 ## 📊 QC results
 
-MERFISH counts track an orthogonal assay and reproduce across the `MsBrain_VS38` aging cohort (Young / Middle / Old).
+Before any biological interpretation, [`qc_rnaseq_correlation.ipynb`](notebooks/pipeline/qc_rnaseq_correlation.ipynb) checks that MERFISH counts agree with an orthogonal assay and reproduce across the `MsBrain_VS38` aging cohort (Young / Middle / Old). Summary rendered with **seaborn** via [`scripts/qc_figures.py`](scripts/qc_figures.py).
 
-| | |
+![MERSCOPE QC summary](assets/qc_summary.png)
+
+- ✅ **Orthogonal validation** — per-gene MERFISH vs bulk RNAseq, Pearson **`r = 0.70–0.75`**.
+- 🔁 **Reproducibility** — replicate-vs-replicate **`r = 0.98–1.00`**, count ratio ≈ 1.0.
+- 📈 **Yield** — ~1.5–1.65 × 10⁸ transcripts per sample (~74k–87k / FOV).
+
+<details>
+<summary>Raw per-gene plots (original notebook outputs)</summary>
+
+| MERFISH vs bulk RNAseq | Replicate correlation |
 |---|---|
 | ![](assets/qc_merfish_vs_rnaseq.png) | ![](assets/qc_replicate_correlation.png) |
-| **MERFISH vs bulk RNAseq** — Pearson `r = 0.70 / 0.75 / 0.72`. | **Replicate reproducibility** — `r = 0.98–1.00`, count ratio ≈ 1.0. |
-| ![](assets/qc_total_counts_per_sample.png) | ![](assets/qc_counts_per_fov.png) |
-| **Total counts per sample** — ~1.5–1.65 × 10⁸ transcripts each. | **Counts per FOV** — ~74k–87k, consistent yield. |
+
+</details>
 
 ## 📓 Notebooks
 
@@ -62,14 +70,16 @@ MERFISH/
 │       ├── qc_rnaseq_correlation.ipynb
 │       ├── umap_spatial_heatmap_v0.3.1.ipynb
 │       └── transcripts_genes_of_interest_v0.2.0.ipynb
-└── assets/                               # extracted figures
+├── scripts/
+│   └── qc_figures.py                     # seaborn QC summary figure
+└── assets/                               # hero spatial map + QC figures
 ```
 
 ## 🚀 Quick start
 
 ```bash
 pip install scanpy leidenalg loompy clustergrammer2 observable_jupyter \
-            tifffile opencv-python h5py matplotlib pandas numpy scipy scikit-learn fsspec gcsfs
+            tifffile opencv-python h5py matplotlib seaborn pandas numpy scipy scikit-learn fsspec gcsfs
 jupyter lab        # open notebooks/showcase_mouse_brain.ipynb
 ```
 
