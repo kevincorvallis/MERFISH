@@ -260,3 +260,42 @@ def test_real_ccfv3_coarsening_recovers_calibrates_and_qc():
     good_qc = ar.section_qc(true_assign["region_id"], cells["cell_type"], reference)["score"]
     bad_qc = ar.section_qc(bad["region_id"], cells["cell_type"], reference)["score"]
     assert bad_qc > good_qc + 0.1
+
+
+@pytest.mark.live
+def test_thalamus_recovered_across_multiple_scans():
+    """A named-region, multi-scan example: pull three *different* coronal scans through the
+    thalamus (CCF ``TH`` + 66 sub-nuclei) from the real CCFv3, register each with a realistic
+    anchoring error, and confirm the thalamus is recovered in *every* scan. This is the
+    multi-scan 'common frame' claim — a large central structure stays robust under registration
+    error. (Uses the affine backend for speed; STalign is covered above and in
+    ``scripts/thalamus_demo.py``.)"""
+    pytest.importorskip("brainglobe_atlasapi")
+    from brainglobe_atlasapi import BrainGlobeAtlas
+
+    bg = BrainGlobeAtlas("allen_mouse_100um")
+    ref = np.asarray(bg.reference, dtype=float)
+    ann = np.asarray(bg.annotation)
+    res = np.array(bg.resolution, dtype=float)
+    nx = ref.shape
+    xA = [np.arange(n) * d - (n - 1) * d / 2.0 for n, d in zip(nx, res)]
+    th = bg.structures.acronym_to_id_map["TH"]
+    th_ids = np.array(sorted({bg.structures.acronym_to_id_map[a]
+                              for a in bg.get_structure_descendants("TH")} | {th}))
+
+    recalls = []
+    for k, ap in enumerate((64, 72, 80)):  # anterior / mid / posterior thalamus
+        sl = ref[ap]
+        ys, xs = np.where(sl > sl.mean() * 0.5)
+        sel = np.random.default_rng(k).choice(len(xs), 2500, replace=False)
+        cells = np.column_stack([xA[2][xs[sel]], xA[1][ys[sel]]])  # (x, y) microns
+        truth_thal = np.isin(ann[ap, ys[sel], xs[sel]], th_ids)
+        assert truth_thal.sum() > 50, f"scan AP={ap} should contain thalamus"
+        # affine coronal registration (micron x,y -> CCF voxel) at this level + realistic error
+        plane = ar.AnchoredPlane([ap, -xA[1][0] / res[1], -xA[2][0] / res[2]],
+                                 [0, 0, 1 / res[2]], [0, 1 / res[1], 0])
+        reg = ar.PlaneRegistration(plane).perturb(np.random.default_rng(100 + k),
+                                                  angle_deg=1.0, shift=1.5)
+        pred_thal = np.isin(ar._lookup(ann, reg.transform_points(cells)), th_ids)
+        recalls.append((pred_thal & truth_thal).sum() / truth_thal.sum())
+    assert min(recalls) > 0.6, f"thalamus must be recovered in every scan: {recalls}"

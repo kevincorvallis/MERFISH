@@ -56,7 +56,7 @@ lift-over, plus calibrated uncertainty and QC.
 | Geometry, label transfer, ensemble confidence, QC cross-check | Implemented | [`scripts/atlas_registration.py`](../scripts/atlas_registration.py) |
 | Real Allen CCFv3 volume load | Implemented (`load_ccf_brainglobe`) | needs `brainglobe-atlasapi` |
 | DeepSlice affine anchoring | Stubbed (`deepslice_anchor`) | needs `DeepSlice` |
-| STalign LDDMM / ANTs SyN deformable warp | Stubbed / optional live test | isolated env (numpy pin) |
+| STalign LDDMM / ANTs SyN deformable warp | Implemented / optional live test | unified dev env (`--no-deps` STalign install) |
 
 Full design, citations, and **honest limitations**:
 [`docs/atlas-registration-2026.md`](atlas-registration-2026.md).

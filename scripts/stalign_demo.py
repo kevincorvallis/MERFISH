@@ -5,9 +5,9 @@ This exercises the *real* deformable backend (not the synthetic core): it fits
 cell into the atlas, and lifts over region labels — then checks recovery against ground truth
 (the section was cut from a *known* CCF plane, so we know the right answer).
 
-Heavy deps (torch + STalign, which pins numpy<1.24) — run in the isolated env:
+Needs torch + STalign (see README — STalign installed with ``--no-deps``):
 
-    .venv-reg/bin/python scripts/stalign_demo.py --niter 100
+    python scripts/stalign_demo.py --niter 100
 
 Produces ``assets/atlas_registration_stalign.png``.
 """

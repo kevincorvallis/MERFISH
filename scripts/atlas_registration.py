@@ -186,8 +186,37 @@ class STalignRegistration:
                                    self._X_, self._Y_, self._dx, self._xA, self._dxA)
 
 
+def coarse_ap_search(reference, resolution, section_img, x_axis, y_axis):
+    """Affine-anchoring stage: find the coronal (AP) plane of ``reference`` best matching a 2D
+    section image, by normalized cross-correlation. A training-free, image-similarity stand-in for
+    DeepSlice's learned AP/cut-angle estimate — it hands the deformable backend a correct starting
+    plane (the fix for STalign's init-sensitivity, e.g. posterior sections converging to a wrong AP).
+
+    ``reference`` 3D grayscale atlas (AP = axis 0); ``resolution`` (dz, dy, dx) microns/voxel;
+    ``section_img`` the 2D section rendered on the (``y_axis``, ``x_axis``) micron grid. Returns
+    ``(best_ap_index, ncc_curve)``."""
+    from scipy.ndimage import map_coordinates
+
+    ref = np.asarray(reference, dtype=float)
+    res = np.asarray(resolution, dtype=float)
+    nz, ny, nx = ref.shape
+    y0, x0 = -(ny - 1) * res[1] / 2.0, -(nx - 1) * res[2] / 2.0
+    yy, xx = np.meshgrid(np.asarray(y_axis, float), np.asarray(x_axis, float), indexing="ij")
+    coords = np.stack([((yy - y0) / res[1]).ravel(), ((xx - x0) / res[2]).ravel()])
+
+    sec = np.asarray(section_img, dtype=float)
+    sec = (sec - sec.mean()) / (sec.std() + 1e-12)
+    ncc = np.full(nz, -1.0)
+    for ap in range(nz):
+        s = map_coordinates(ref[ap], coords, order=1, mode="constant").reshape(sec.shape)
+        if s.std() > 1e-9:
+            ncc[ap] = float(np.mean(sec * (s - s.mean()) / s.std()))
+    return int(np.argmax(ncc)), ncc
+
+
 def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float = 200.0,
-                     nt: int = 3, blur: float = 1.0, device: str = "cpu", **lddmm):
+                     nt: int = 3, blur: float = 1.0, device: str = "cpu", init: str = "auto",
+                     init_scale: float = 0.95, **lddmm):
     """Stage 2 (recommended): fit STalign LDDMM — molecular-aware diffeomorphic 2D->3D warp to CCFv3.
 
     Rasterizes single-cell positions to an image (STalign's varifold input) and fits
@@ -196,15 +225,18 @@ def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float
 
     ``reference``  3D grayscale atlas volume (e.g. brainglobe ``bg.reference``);
     ``resolution`` (dz, dy, dx) microns/voxel; ``cells_xy`` (N, 2) section coords (x, y microns).
+    ``init="auto"`` first runs ``coarse_ap_search`` to anchor the AP plane (then LDDMM refines) —
+    this fixes the init-sensitivity; pass ``init=None`` or an explicit ``T=`` for STalign's default.
 
-    NOTE: STalign pins ``numpy<1.24`` and needs ``torch`` — install in an isolated env (the repo
-    runs numpy 2.4; see ``.venv-reg`` and docs §3/§5)."""
+    NOTE: upstream STalign pins stale deps in ``requirements.txt`` — install with ``--no-deps``
+    after ``requirements-dev.txt`` (see README). Validated on numpy 2.4 + Python 3.12."""
     try:
         from STalign import STalign as ST
     except ImportError as e:  # pragma: no cover - optional heavy backend
         raise NotImplementedError(
-            "Install torch + STalign ('pip install torch \"git+https://github.com/JEFworks-Lab/"
-            "STalign.git\"') in an isolated env (STalign pins numpy<1.24); see docs §2/§5.") from e
+            "Install requirements-dev.txt then: uv pip install --no-deps "
+            "'STalign @ git+https://github.com/JEFworks-Lab/STalign.git' "
+            "(upstream pins numpy 1.23; --no-deps keeps numpy 2.x).") from e
 
     ref = np.asarray(reference, dtype=float)
     dxA = np.asarray(resolution, dtype=float)
@@ -217,6 +249,13 @@ def stalign_register(reference, resolution, cells_xy, niter: int = 200, a: float
     X_, Y_, W = ST.rasterize(xy[:, 0], xy[:, 1], dx=float(dxA[-1]), blur=blur, draw=False)
     xJ = [Y_, X_]
     J = W[None] / np.mean(np.abs(W))
+
+    # affine anchor: localize the section's AP plane (DeepSlice-style stage 1) so LDDMM starts in
+    # the right basin — fixes init-sensitivity (posterior sections otherwise converge to a wrong AP)
+    if init == "auto" and "T" not in lddmm:
+        best_ap, _ = coarse_ap_search(ref, dxA, W, X_, Y_)
+        lddmm.setdefault("L", np.eye(3) * init_scale)
+        lddmm.setdefault("T", np.array([-xA[0][best_ap], 0.0, 0.0]))
 
     out = ST.LDDMM_3D_to_slice(xA, I, xJ, J, nt=nt, niter=niter, a=a, device=device, **lddmm)
     return STalignRegistration(out["xv"], out["v"], out["A"], X_, Y_, float(dxA[-1]), xA, dxA)

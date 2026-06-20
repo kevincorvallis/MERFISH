@@ -1,7 +1,14 @@
-# Slim deps for offline pytest (pytest -m "not live") and core scripts.
-# Python >=3.12 required (scanpy 1.12+). Install optional extras separately — see README.
+# Unified dev env: offline pytest, live tests, notebooks, STalign LDDMM.
+# Python >=3.12 required (scanpy 1.12+). Pin exact versions for reproducible CI.
 #
-# Pin exact versions for reproducible CI; bump with: uv pip install --upgrade -r requirements-dev.txt
+# Install:
+#   uv venv --python 3.12 .venv && source .venv/bin/activate
+#   uv pip install -r requirements-dev.txt
+#   uv pip install --no-deps "STalign @ git+https://github.com/JEFworks-Lab/STalign.git"
+#
+# STalign workaround: upstream requirements.txt pins numpy==1.23.4 (stale). Install with
+# --no-deps so it uses this env's numpy 2.x + torch 2.12. Use np2typing (not nptyping) for
+# numpy-2-compatible type hints that pynrrd/STalign import at runtime.
 
 pytest==9.1.1
 numpy==2.4.6
@@ -11,12 +18,19 @@ scikit-learn==1.9.0
 scanpy==1.12.1
 anndata==0.12.17
 
-# Needed by Scanpy Leiden + live tests (install with core env)
+# Scanpy Leiden + live tests
 leidenalg==0.12.0
 python-igraph==1.0.0
 
-# Live tests + figure scripts (same env as core; STalign stays in .venv-reg)
+# Live tests + figure scripts (squidpy, brainglobe, STalign runtime)
 squidpy==1.8.2
 seaborn==0.13.2
 matplotlib==3.11.0
 brainglobe-atlasapi==2.3.1
+torch==2.12.1
+np2typing==2.6.3
+tornado==6.5.7
+docopt==0.6.2
+pynrrd==1.0.0
+openpyxl==3.1.5
+scikit-image==0.26.0
