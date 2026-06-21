@@ -123,6 +123,19 @@ def test_coarse_anchor_recovers_ap_under_scale_and_rotation():
     assert (found["scale"], found["theta_deg"]) != (1.0, 0.0), "should find a non-trivial transform"
 
 
+def test_locate_section_finds_ap_and_translation():
+    """For a partial section / off-centre ROI, locate_section recovers the AP plane AND the
+    in-plane translation (the DOF coarse_anchor lacks) — found by FFT template matching."""
+    vol = _graded_volume()                     # (30, 40, 40), a blob that marches with AP
+    res = np.array([1.0, 1.0, 1.0])
+    true_ap, r0, c0, ph, pw = 18, 12, 12, 16, 16
+    roi = vol[true_ap][r0:r0 + ph, c0:c0 + pw]  # an off-centre crop
+    loc = ar.locate_section(vol, res, roi, scales=(1.0,), thetas_deg=(0.0,))
+    assert abs(loc["ap"] - true_ap) <= 3, f"AP off: {loc['ap']} vs {true_ap}"
+    assert abs(loc["ty"] - (r0 + ph / 2)) <= 4 and abs(loc["tx"] - (c0 + pw / 2)) <= 4, \
+        f"translation off: ({loc['ty']:.0f},{loc['tx']:.0f}) vs ({r0 + ph/2},{c0 + pw/2})"
+
+
 def test_coarse_anchor_reduces_to_ap_search_when_grid_trivial():
     """With a trivial (identity) scale/rotation grid, coarse_anchor agrees with coarse_ap_search."""
     vol = _graded_volume()

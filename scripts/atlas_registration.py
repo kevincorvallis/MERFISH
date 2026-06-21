@@ -279,6 +279,42 @@ def coarse_anchor(reference, resolution, section_img, x_axis, y_axis,
     return best
 
 
+def locate_section(reference, resolution, section_img, x_axis=None, y_axis=None,
+                   scales=(0.7, 1.0, 1.3), thetas_deg=(-15.0, 0.0, 15.0)) -> dict:
+    """AP plane + in-plane scale + rotation + **translation** search via FFT normalized
+    cross-correlation template matching. Unlike :func:`coarse_anchor` (which assumes the section
+    is centred and roughly fills the slice), this *locates* a partial section or off-centre ROI
+    WITHIN each CCF coronal plane — the missing degree of freedom for small ROIs (e.g. a dissected
+    hypothalamus). Returns ``{ap, scale, theta_deg, ty, tx, ncc}`` where ``(ty, tx)`` is the CCF
+    voxel coordinate of the section centre. Needs scikit-image. NOTE: matches the section image
+    against the CCF *reference intensity* — cross-modality (cell-density vs Nissl) matches are
+    inherently weaker than same-modality ones."""
+    from skimage.feature import match_template
+    from scipy.ndimage import rotate as ndrotate, zoom as ndzoom
+
+    ref = np.asarray(reference, dtype=float)
+    nz, ny, nx = ref.shape
+    tmpl0 = np.asarray(section_img, dtype=float)
+    best = {"ncc": -2.0, "ap": nz // 2, "scale": 1.0, "theta_deg": 0.0,
+            "ty": ny / 2.0, "tx": nx / 2.0}
+    for s in scales:
+        t = ndzoom(tmpl0, s, order=1) if s != 1.0 else tmpl0
+        for th in thetas_deg:
+            tt = ndrotate(t, th, order=1, reshape=True) if th != 0.0 else t
+            if min(tt.shape) < 3 or tt.shape[0] >= ny or tt.shape[1] >= nx or tt.std() < 1e-9:
+                continue
+            for ap in range(nz):
+                if ref[ap].std() < 1e-9:
+                    continue
+                r = match_template(ref[ap], tt)
+                k = np.unravel_index(int(np.argmax(r)), r.shape)
+                v = float(r[k])
+                if v > best["ncc"]:
+                    best = {"ncc": v, "ap": int(ap), "scale": float(s), "theta_deg": float(th),
+                            "ty": float(k[0] + tt.shape[0] / 2.0), "tx": float(k[1] + tt.shape[1] / 2.0)}
+    return best
+
+
 def anchoring_to_plane(anchoring) -> "AnchoredPlane":
     """Convert a QuickNII/DeepSlice 9-value anchoring (Ox,Oy,Oz, Ux,Uy,Uz, Vx,Vy,Vz) into an
     ``AnchoredPlane``. DeepSlice's convention is exactly ours: a fractional image coordinate
@@ -555,6 +591,78 @@ def section_qc(region_ids, cell_types, reference_composition: dict) -> dict:
     qc = pd.DataFrame(rows)
     score = float(np.average(qc["js"], weights=qc["n"])) if len(qc) else 0.0
     return {"per_region": qc, "score": score, "n": int(len(region_ids))}
+
+
+# --- genuine non-circular, cell-type-aware QC (external reference + shared vocabulary) ----------
+
+# Keyword rules mapping the Moffitt `Cell_class` AND Allen ABC class vocabularies to a shared broad
+# vocabulary, so a section's real cell types can be compared to an EXTERNAL atlas reference. The
+# collapses (astrocyte+ependymal -> astro_epen; OD/OPC -> oligo; endo/VLMC/mural -> vascular) are
+# deliberate coarse bridges between mismatched taxonomies — documented approximations, matched in order.
+_BROAD_RULES = (
+    ("excitatory", ("excit", "glut")),
+    ("inhibitory", ("inhib", "gaba", "pvalb", "sst", "vip", "lamp5")),
+    ("astro_epen", ("astro", "epen")),
+    ("oligo", ("oligo", "opc", "od ", "od-")),
+    ("microglia", ("micro", "pvm", "immune", "macro", "bam")),
+    ("vascular", ("endo", "vlmc", "vascul", "peri", "mural", "smc")),
+)
+
+
+def to_broad_class(labels) -> np.ndarray:
+    """Map cell-type labels (Moffitt ``Cell_class`` or Allen ABC class names) to a shared broad
+    vocabulary ``{excitatory, inhibitory, astro_epen, oligo, microglia, vascular, other}`` so a
+    section's real types can be compared to an external atlas reference. Keyword-matched in order;
+    anything unmatched -> ``other``."""
+    out = []
+    for s in labels:
+        low = str(s).lower()
+        hit = "other"
+        for cls, kws in _BROAD_RULES:
+            if any(k in low for k in kws):
+                hit = cls
+                break
+        out.append(hit)
+    return np.array(out, dtype=object)
+
+
+def broaden_reference(reference: dict) -> dict:
+    """Re-aggregate a fine ``{region: {class: fraction}}`` reference into the broad vocabulary."""
+    out = {}
+    for r, comp in reference.items():
+        fine = list(comp.keys())
+        broad = to_broad_class(fine)
+        agg: dict[str, float] = {}
+        for b, k in zip(broad, fine):
+            agg[b] = agg.get(b, 0.0) + float(comp[k])
+        out[int(r)] = agg
+    return out
+
+
+def composition_qc(region_ids, cell_classes, reference_composition: dict) -> dict:
+    """Non-circular, cell-type-aware QC: compare a section's per-region cell-class composition to an
+    **external** reference (e.g. the Allen ABC atlas) in a shared vocabulary. Scores ONLY regions
+    covered by both, via Jensen-Shannon over the shared classes — so the real cell labels drive the
+    score. Cells in regions absent from the reference are reported as *uncovered*, NOT defaulted to
+    1.0 (the artifact that made the old ``section_qc`` cell-type-blind on disjoint placements).
+    Returns ``per_region`` JS, the cell-weighted ``score`` over covered regions, and ``coverage``."""
+    region_ids = np.asarray(region_ids)
+    obs = region_composition(region_ids, cell_classes)
+    rows = []
+    covered = 0
+    for r, comp in obs.items():
+        n = int(np.sum(region_ids == r))
+        if r in reference_composition:
+            keys = sorted(set(comp) | set(reference_composition[r]))
+            pv = [comp.get(k, 0.0) for k in keys]
+            qv = [reference_composition[r].get(k, 0.0) for k in keys]
+            rows.append({"region_id": int(r), "js": jensen_shannon(pv, qv), "n": n})
+            covered += n
+    total = int(len(region_ids))
+    qc = pd.DataFrame(rows)
+    score = float(np.average(qc["js"], weights=qc["n"])) if len(qc) else float("nan")
+    return {"per_region": qc, "score": score, "n_covered": covered,
+            "n_uncovered": total - covered, "coverage": covered / max(total, 1)}
 
 
 # --- synthetic end-to-end harness (no downloads) ------------------------------

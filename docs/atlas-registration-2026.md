@@ -348,6 +348,38 @@ are available" path). Both are covered by offline tests in
 > engine's accuracy. The STalign result above *is* a real-fit validation. **DeepSlice** and **ANTs**
 > remain stubbed with install hints.
 
+### Real-tissue stress test (Moffitt 2018) — adversarially-verified honest findings
+
+To confront the synthetic-only validation above, the pipeline was run on a **real** MERFISH section
+(Moffitt 2018 preoptic hypothalamus, Bregma −0.14 mm, 6,605 cells, 16 real `Cell_class` types) →
+CCFv3 (allen_mouse_100um; `HY` present at AP 45–84) via
+[`scripts/real_tissue_validation.py`](../scripts/real_tissue_validation.py). Every number below was
+adversarially re-checked (a skeptic reproduced them and instrumented the internals):
+
+1. **Automated placement of a small dissected ROI fails — confirmed.** The training-free NCC anchor
+   (`coarse_anchor`, centred, no translation) lands at **AP 129** (true HY 45–84) → **0 % of cells in
+   HY**. Adding translation (`locate_section`) raises the image match (NCC 0.33 → 0.73) but still
+   lands at AP 102, **0 % in HY** — cell-density-vs-Nissl matching of a 1.8 mm ROI against the whole
+   brain is under-constrained. *Caveat:* this is the weakest backend; the recommended **DeepSlice →
+   STalign** path was **not** run on real tissue (DeepSlice needs full-section brightfield images,
+   which a dissected ROI is not).
+2. **The 86 %-in-HY "anatomy-informed" number is a geometry self-consistency check, not validation.**
+   Centring the ROI on the HY centroid makes a high in-HY fraction true *by construction* (any point
+   cloud scores ~86 %). It only confirms `_section_plane`/`_lookup` units are self-consistent.
+3. **The QC is NOT yet cell-type-aware on real data.** A gross misregistration scores 1.0 vs the
+   fitted 0.0 — but the fitted baseline is **self-referential** (reference built from the fitted
+   placement → JS(p,p)=0) and the 1.0 is `section_qc`'s **missing-region default** firing because the
+   wrong placement lands in *disjoint* regions. **Scrambling the real cell types yields the identical
+   1.0** → the `Cell_class` labels are inert here. Genuine non-circular QC needs an **external**
+   per-region reference (Allen ABC) in the cells' taxonomy — blocked by the Moffitt↔ABC mismatch.
+
+**Net:** the real-tissue run did its job — it broke the comfortable synthetic story and pinpointed the
+true remaining work: (a) cross-modality / full-section registration (DeepSlice or STalign on real
+sections, or matching cell-density to the ABC MERFISH reference rather than Nissl), and (b) an external
+ABC composition reference + a Moffitt→ABC cell-class mapping to make the QC genuinely cell-type-aware.
+The geometry, label-transfer, calibrated-UQ, and `locate_section` machinery are correct; what remains
+*unproven on real tissue* is **automated placement** and **cell-type-aware QC**.
+
 ## Refuted / do-not-claim
 
 - **None killed** in this pass (25/25 claims confirmed). The only hedged item: CAST being

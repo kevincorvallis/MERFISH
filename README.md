@@ -7,7 +7,7 @@
 ![scanpy](https://img.shields.io/badge/scanpy-single--cell-1B998B)
 ![squidpy](https://img.shields.io/badge/squidpy-spatial-4B8BBE)
 ![MERSCOPE](https://img.shields.io/badge/Vizgen-MERSCOPE-6E44FF)
-![tests](https://img.shields.io/badge/tests-21%20offline%20%2F%2026%20total-brightgreen)
+![tests](https://img.shields.io/badge/tests-34%20offline%20%2F%2041%20total-brightgreen)
 ![CI](https://github.com/kevincorvallis/MERFISH/actions/workflows/test.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
@@ -126,7 +126,9 @@ MERFISH/
 │   ├── test_pipeline.py                  # pytest: synthetic + live real-data
 │   ├── test_mapping.py                   # pytest: principled mapping + calibration
 │   ├── test_segmentation.py              # pytest: segmentation changes clustering
-│   └── test_atlas_registration.py        # pytest: registration geometry + calibration + QC
+│   ├── test_atlas_registration.py        # pytest: registration geometry + calibration + QC
+│   ├── test_atlas_init.py                # pytest: AP anchor + STalign auto-init
+│   └── test_composition_qc.py            # pytest: cell-type-aware composition QC
 ├── docs/
 │   ├── methods-review-2026.md            # cell-type / segmentation / registration upgrades
 │   └── atlas-registration-2026.md        # 2D section → CCFv3 registration review (cited)
@@ -299,8 +301,8 @@ The pipeline isn't only demoed — it's **validated by a `pytest` suite**, inclu
 ```bash
 uv pip install -r requirements-dev.txt
 uv pip install --no-deps "STalign @ git+https://github.com/JEFworks-Lab/STalign.git"
-pytest -m "not live"      # 21 offline (synthetic) — no network needed
-pytest -m live            # 5 live (MERFISH + CCFv3 + STalign) — needs network
+pytest -m "not live"      # 34 offline (synthetic) — no network needed
+pytest -m live            # 7 live (MERFISH + CCFv3 + STalign) — needs network
 ```
 
 ## 🌐 Spatial transcriptomics in context
