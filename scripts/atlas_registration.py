@@ -665,6 +665,44 @@ def composition_qc(region_ids, cell_classes, reference_composition: dict) -> dic
             "n_uncovered": total - covered, "coverage": covered / max(total, 1)}
 
 
+def build_abc_reference(cache_dir, structures, depth: int = 3,
+                        dataset: str = "MERFISH-C57BL6J-638850-CCF",
+                        region_col: str = "parcellation_structure", class_col: str = "class") -> dict:
+    """Build a **real external** reference ``{CCF depth-`depth` region id: {broad_class: fraction}}``
+    from the Allen ABC whole-brain MERFISH atlas (~4M cells) via ``abc_atlas_access`` — the genuine,
+    non-self-referential reference for :func:`composition_qc`.
+
+    Each ABC cell's ``parcellation_structure`` acronym is rolled up to the depth-``depth`` ontology
+    (the same rule as :func:`coarsen_to_depth`, so region ids match a coarsened section) and its
+    ``class`` is mapped to the broad vocabulary via :func:`to_broad_class`. ``structures`` is
+    brainglobe's structures mapping. Heavy (~1.6 GB download, guarded)."""
+    try:
+        from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
+    except ImportError as e:  # pragma: no cover - optional heavy dep
+        raise NotImplementedError(
+            "Install abc_atlas_access ('pip install \"abc_atlas_access @ "
+            "git+https://github.com/alleninstitute/abc_atlas_access.git\"'); see docs §3.") from e
+    import pandas as pd
+
+    cache = AbcProjectCache.from_s3_cache(Path(cache_dir))
+    path = cache.get_metadata_path(dataset, "cell_metadata_with_parcellation_annotation")
+    df = pd.read_csv(path, usecols=[region_col, class_col]).dropna(subset=[region_col, class_col])
+
+    acro2id = {s["acronym"]: int(s["id"]) for s in structures.values()}
+
+    def _depth_id(acro):
+        sid = acro2id.get(acro)
+        if sid is None:
+            return -1
+        p = structures[sid]["structure_id_path"]
+        return int(p[min(depth, len(p) - 1)])
+
+    df["_region"] = df[region_col].map(_depth_id)
+    df = df[df["_region"] >= 0]
+    broad = to_broad_class(df[class_col].to_numpy())
+    return region_composition(df["_region"].to_numpy(), broad)
+
+
 # --- synthetic end-to-end harness (no downloads) ------------------------------
 
 def sample_section_cells(annotation, plane: AnchoredPlane, n: int = 4000, seed: int = 0,

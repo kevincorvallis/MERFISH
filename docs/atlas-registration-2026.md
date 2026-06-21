@@ -378,7 +378,40 @@ true remaining work: (a) cross-modality / full-section registration (DeepSlice o
 sections, or matching cell-density to the ABC MERFISH reference rather than Nissl), and (b) an external
 ABC composition reference + a Moffitt→ABC cell-class mapping to make the QC genuinely cell-type-aware.
 The geometry, label-transfer, calibrated-UQ, and `locate_section` machinery are correct; what remains
-*unproven on real tissue* is **automated placement** and **cell-type-aware QC**.
+*unproven on real tissue* is **automated placement** (the cell-type-aware QC is now resolved — below).
+
+### Genuine non-circular, cell-type-aware QC — resolved (adversarially verified)
+
+Finding #3 (the QC was cell-type-blind) is now **fixed**. The genuine version,
+[`composition_qc`](../scripts/atlas_registration.py), scores a section against an **external**
+reference: [`build_abc_reference`](../scripts/atlas_registration.py) builds a real
+`{depth-3 region → {broad cell class → fraction}}` table from the **Allen ABC whole-brain MERFISH
+atlas (~4 M cells)** via `abc_atlas_access`, and [`to_broad_class`](../scripts/atlas_registration.py)
+bridges the Moffitt and ABC taxonomies into a shared vocabulary. It scores only regions covered by
+both (real Jensen-Shannon) and reports coverage separately — eliminating the missing-region default.
+
+Real Moffitt section vs the real ABC reference
+([`scripts/abc_qc_validation.py`](../scripts/abc_qc_validation.py),
+[`assets/abc_qc_validation.png`](../assets/abc_qc_validation.png); live-tested in
+[`tests/test_composition_qc.py`](../tests/test_composition_qc.py)):
+
+| comparison | JS vs ABC |
+|---|---|
+| **real cell types, correct regions** | **0.138** |
+| real types, **shuffled** ABC regions | 0.373 (2.7×) |
+| **wrong marginal** (all excitatory) | 0.409 (3.0×) |
+
+coverage **0.95**. The real composition matches the *correct* ABC regions far better than shuffled
+regions or a wrong cell-type marginal → the QC is genuinely **cell-type-aware and non-circular**. An
+adversarial re-check verified all three earlier degeneracies (self-referential / missing-region /
+inert types) are **FIXED**.
+
+**Caveats that must travel with these numbers:** (1) the dissected ROI is ~94 % one depth-3 region
+(`IB`), so this effectively QCs a single region — coverage 0.95 overstates breadth; (2) **0.138 is a
+relative result**, not a calibrated pass threshold (real Moffitt↔ABC platform/panel differences keep
+it > 0); (3) the section is **hand-placed** (anatomy-informed), so this validates the cell-type QC
+*bridge*, NOT automated registration (still open, finding #1); (4) `to_broad_class` coarse-collapses
+mismatched taxonomies (astro+epen, OD/OPC→oligo, endo/VLMC→vascular).
 
 ## Refuted / do-not-claim
 
