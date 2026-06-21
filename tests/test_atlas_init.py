@@ -136,6 +136,19 @@ def test_locate_section_finds_ap_and_translation():
         f"translation off: ({loc['ty']:.0f},{loc['tx']:.0f}) vs ({r0 + ph/2},{c0 + pw/2})"
 
 
+def test_locate_section_respects_ap_range_prior():
+    """An anatomical AP-range prior must confine the search to that band — the fix for small,
+    non-distinctive ROIs that can't be localized in the whole volume."""
+    vol = _graded_volume()
+    res = np.array([1.0, 1.0, 1.0])
+    true_ap, r0, c0, ph, pw = 18, 12, 12, 16, 16
+    roi = vol[true_ap][r0:r0 + ph, c0:c0 + pw]
+    full = ar.locate_section(vol, res, roi, scales=(1.0,), thetas_deg=(0.0,))
+    assert abs(full["ap"] - true_ap) <= 3
+    pen = ar.locate_section(vol, res, roi, scales=(1.0,), thetas_deg=(0.0,), ap_range=(24, 28))
+    assert 24 <= pen["ap"] <= 28, f"ap_range prior not respected: {pen['ap']}"
+
+
 def test_coarse_anchor_reduces_to_ap_search_when_grid_trivial():
     """With a trivial (identity) scale/rotation grid, coarse_anchor agrees with coarse_ap_search."""
     vol = _graded_volume()
@@ -177,3 +190,29 @@ def test_deepslice_anchor_is_wired_and_guarded():
             ar.deepslice_anchor("/nonexistent/section/images")
     else:  # pragma: no cover - only when DeepSlice is installed
         pytest.skip("DeepSlice installed; exercised by integration runs with real images")
+
+
+@pytest.mark.live
+def test_abc_density_prior_recovers_roi_placement():
+    """The open-problem fix on real data: a same-modality ABC cell-density target + an AP-range
+    anatomical prior places the small Moffitt hypothalamus ROI in HY, where whole-brain matching
+    fails. Skips unless brainglobe, abc_atlas_access, the ABC metadata, and the Moffitt h5ad exist."""
+    import glob
+    import os
+
+    pytest.importorskip("brainglobe_atlasapi")
+    pytest.importorskip("abc_atlas_access")
+    pytest.importorskip("skimage")
+    if not glob.glob("data/abc_cache/**/cell_metadata_with_parcellation_annotation.csv", recursive=True):
+        pytest.skip("ABC metadata not downloaded (data/abc_cache)")
+    if not os.path.exists("data/anndata/merfish.h5ad"):
+        pytest.skip("Moffitt h5ad not present")
+
+    import roi_placement_demo as d
+    r = d.run()
+    p = r["placements"]
+    # the AP-range prior is the fix — both target modalities recover the ROI; whole-brain fails
+    assert p["nissl_with_HY_prior"]["frac_in_HY"] > 0.5, "AP-range prior should place the ROI in HY"
+    assert p["abc_density_with_HY_prior"]["frac_in_HY"] > 0.5
+    assert (p["nissl_with_HY_prior"]["frac_in_HY"]
+            > p["nissl_whole_brain"]["frac_in_HY"] + 0.3), "prior must beat whole-brain search"

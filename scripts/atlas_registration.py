@@ -280,20 +280,24 @@ def coarse_anchor(reference, resolution, section_img, x_axis, y_axis,
 
 
 def locate_section(reference, resolution, section_img, x_axis=None, y_axis=None,
-                   scales=(0.7, 1.0, 1.3), thetas_deg=(-15.0, 0.0, 15.0)) -> dict:
+                   scales=(0.7, 1.0, 1.3), thetas_deg=(-15.0, 0.0, 15.0), ap_range=None) -> dict:
     """AP plane + in-plane scale + rotation + **translation** search via FFT normalized
     cross-correlation template matching. Unlike :func:`coarse_anchor` (which assumes the section
     is centred and roughly fills the slice), this *locates* a partial section or off-centre ROI
     WITHIN each CCF coronal plane — the missing degree of freedom for small ROIs (e.g. a dissected
     hypothalamus). Returns ``{ap, scale, theta_deg, ty, tx, ncc}`` where ``(ty, tx)`` is the CCF
-    voxel coordinate of the section centre. Needs scikit-image. NOTE: matches the section image
-    against the CCF *reference intensity* — cross-modality (cell-density vs Nissl) matches are
-    inherently weaker than same-modality ones."""
+    voxel coordinate of the section centre. Needs scikit-image.
+
+    ``ap_range=(lo, hi)`` restricts the AP search to a coarse **anatomical prior** (inclusive voxel
+    range) — essential for small dissected ROIs, which are otherwise too non-distinctive to localize
+    in the whole brain. Best paired with a SAME-MODALITY target (:func:`abc_density_volume`, cell
+    density) rather than the Nissl ``reference`` — cross-modality matching is much weaker."""
     from skimage.feature import match_template
     from scipy.ndimage import rotate as ndrotate, zoom as ndzoom
 
     ref = np.asarray(reference, dtype=float)
     nz, ny, nx = ref.shape
+    ap_lo, ap_hi = (0, nz) if ap_range is None else (max(0, ap_range[0]), min(nz, ap_range[1] + 1))
     tmpl0 = np.asarray(section_img, dtype=float)
     best = {"ncc": -2.0, "ap": nz // 2, "scale": 1.0, "theta_deg": 0.0,
             "ty": ny / 2.0, "tx": nx / 2.0}
@@ -303,7 +307,7 @@ def locate_section(reference, resolution, section_img, x_axis=None, y_axis=None,
             tt = ndrotate(t, th, order=1, reshape=True) if th != 0.0 else t
             if min(tt.shape) < 3 or tt.shape[0] >= ny or tt.shape[1] >= nx or tt.std() < 1e-9:
                 continue
-            for ap in range(nz):
+            for ap in range(ap_lo, ap_hi):
                 if ref[ap].std() < 1e-9:
                     continue
                 r = match_template(ref[ap], tt)
@@ -701,6 +705,35 @@ def build_abc_reference(cache_dir, structures, depth: int = 3,
     df = df[df["_region"] >= 0]
     broad = to_broad_class(df[class_col].to_numpy())
     return region_composition(df["_region"].to_numpy(), broad)
+
+
+def abc_density_volume(cache_dir, shape, resolution, sigma: float = 1.0,
+                       dataset: str = "MERFISH-C57BL6J-638850-CCF"):
+    """Build a 3D cell-**density** volume (counts/voxel, Gaussian-smoothed) on the CCF grid from the
+    Allen ABC whole-brain MERFISH cell positions — a **same-modality** registration target for
+    cell-based sections (e.g. Moffitt cell density), which the Nissl ``reference`` is not. ABC
+    ``x/y/z_ccf`` (mm) map directly onto the brainglobe voxel grid (validated: ~98% land in-brain).
+    Use as the ``reference`` to :func:`locate_section` (with an ``ap_range`` prior) for automated
+    placement of small dissected ROIs. Heavy (~1.6 GB download; guarded)."""
+    try:
+        from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
+    except ImportError as e:  # pragma: no cover - optional heavy dep
+        raise NotImplementedError(
+            "Install abc_atlas_access ('pip install \"abc_atlas_access @ "
+            "git+https://github.com/alleninstitute/abc_atlas_access.git\"'); see docs §3.") from e
+    import pandas as pd
+    from scipy.ndimage import gaussian_filter
+
+    cache = AbcProjectCache.from_s3_cache(Path(cache_dir))
+    path = cache.get_metadata_path(dataset, "cell_metadata_with_parcellation_annotation")
+    xyz = pd.read_csv(path, usecols=["x_ccf", "y_ccf", "z_ccf"]).dropna().to_numpy()
+    shape = tuple(int(s) for s in shape)
+    vox = np.round(xyz / (np.asarray(resolution, float) / 1000.0)).astype(int)
+    ok = np.all((vox >= 0) & (vox < np.array(shape)), axis=1)
+    vox = vox[ok]
+    D = np.zeros(shape, dtype=float)
+    np.add.at(D, (vox[:, 0], vox[:, 1], vox[:, 2]), 1.0)
+    return gaussian_filter(D, sigma) if sigma else D
 
 
 # --- synthetic end-to-end harness (no downloads) ------------------------------
