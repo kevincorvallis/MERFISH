@@ -67,3 +67,28 @@ def test_composition_qc_reports_uncovered_separately():
     qc = ar.composition_qc(rids, classes, ref)
     assert qc["coverage"] == pytest.approx(0.5)
     assert qc["score"] < 1e-9                              # covered region matches -> ~0, not inflated by 999
+
+
+@pytest.mark.live
+def test_genuine_qc_is_celltype_aware_on_real_tissue():
+    """End-to-end genuine fix on REAL data: real Moffitt cells + real `Cell_class` scored against a
+    REAL external Allen ABC reference (~4M cells). The real composition matches the correct ABC
+    regions far better than a wrong cell-type marginal OR shuffled ABC regions — i.e. the QC is
+    genuinely cell-type-aware and non-circular. Skips unless brainglobe, abc_atlas_access, the ABC
+    metadata download, and the Moffitt h5ad are all present."""
+    import glob
+    import os
+
+    pytest.importorskip("brainglobe_atlasapi")
+    pytest.importorskip("abc_atlas_access")
+    if not glob.glob("data/abc_cache/**/cell_metadata_with_parcellation_annotation.csv", recursive=True):
+        pytest.skip("ABC metadata not downloaded (data/abc_cache)")
+    if not os.path.exists("data/anndata/merfish.h5ad"):
+        pytest.skip("Moffitt h5ad not present")
+
+    import abc_qc_validation as v
+    r = v.run()
+    assert r["coverage"] > 0.9, f"external ABC reference should cover the section: {r['coverage']}"
+    assert r["qc_real_types"] < r["qc_wrong_marginal_all_excitatory"] - 0.1, "cell types must be load-bearing"
+    assert r["qc_real_types"] < r["qc_shuffled_reference"] - 0.1, "must match correct ABC regions, not random"
+    assert r["cell_types_load_bearing"]
