@@ -413,6 +413,28 @@ it > 0); (3) the section is **hand-placed** (anatomy-informed), so this validate
 *bridge*, NOT automated registration (still open, finding #1); (4) `to_broad_class` coarse-collapses
 mismatched taxonomies (astro+epen, OD/OPC→oligo, endo/VLMC→vascular).
 
+### Automated placement of a small dissected ROI — resolved with an anatomical prior
+
+The last open item (finding #1): can a small dissected ROI be placed automatically, not by hand? On
+the real Moffitt hypothalamus ROI ([`scripts/roi_placement_demo.py`](../scripts/roi_placement_demo.py)):
+
+- **Whole-brain image search fails** — `coarse_anchor`/`locate_section` land at the wrong AP (102–108
+  vs HY 45–84), **0 % of cells in HY**, with *either* the CCF Nissl reference *or* a same-modality ABC
+  cell-density volume (`abc_density_volume`). A 1.8 mm density patch is too non-distinctive to localize
+  in the whole brain.
+- **A coarse AP-range prior recovers it** — `locate_section(..., ap_range=(lo, hi))` restricted to the
+  hypothalamus AP band (which any experimenter knows for a dissection) places **~75 %** of cells in HY
+  (AP recovered at 53, in range), approaching the hand-placed 86 %.
+- **Honest control — the prior, not the modality, is the lever.** Nissl + prior (**0.75**) ≈
+  ABC-density + prior (**0.71**): the cross-modality hypothesis did *not* pan out; once the AP search is
+  constrained both targets work. `abc_density_volume` is a validated same-modality target (ABC coords
+  align to the brainglobe grid, ~98 % in-brain) but is **not** the decisive factor.
+
+So automated placement of a small ROI is feasible **given a coarse anatomical prior** (the realistic
+operating mode); fully prior-free whole-brain placement of a tiny ROI stays under-constrained and needs
+a full-section input (DeepSlice's intended regime) or richer molecular features. Covered by the live
+test `test_abc_density_prior_recovers_roi_placement` and the offline `ap_range` unit test.
+
 ## Refuted / do-not-claim
 
 - **None killed** in this pass (25/25 claims confirmed). The only hedged item: CAST being
