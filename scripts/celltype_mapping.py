@@ -106,28 +106,64 @@ def map_to_reference(ad_query, ref: dict, n_bootstrap: int = 100,
     For each of ``n_bootstrap`` iterations a random ``frac`` of the marker genes is
     drawn and every cell is assigned to its best-correlated type. The final label is
     the modal assignment; ``confidence`` is the fraction of bootstraps that agreed —
-    a calibrated, probability-like score the cosine heuristic cannot give you.
+    an agreement fraction, not a calibrated probability. Unsupported draws do
+    not vote; ties, constant/non-finite expression and non-positive full-marker
+    correlations produce ``unassigned`` with zero confidence and correlation.
     """
+    if isinstance(n_bootstrap, bool) or not isinstance(n_bootstrap, (int, np.integer)) or n_bootstrap <= 0:
+        raise ValueError("n_bootstrap must be a positive integer")
+    if not np.isfinite(frac) or not 0 < frac <= 1:
+        raise ValueError("frac must be in (0, 1]")
     markers = ref["markers"]
-    types = ref["types"]
-    X = _dense(ad_query[:, markers].X)
-    C = ref["centroids"]
-    rng = np.random.default_rng(seed)
+    types = np.asarray(ref["types"])
     m = len(markers)
-    k = int(max(2, round(frac * m)))
+    if m < 2 or len(types) == 0:
+        raise ValueError("mapping requires at least two markers and one reference type")
+    X = _dense(ad_query[:, markers].X).astype(float, copy=False)
+    C = np.asarray(ref["centroids"], dtype=float)
+    if C.shape != (len(types), m):
+        raise ValueError("reference centroid shape must match types and markers")
+    query_finite = np.isfinite(X).all(axis=1)
+    ref_finite = np.isfinite(C).all(axis=1)
+    # Non-finite rows cannot contribute evidence. Zero placeholders keep the
+    # vectorized correlation arithmetic finite; the masks still exclude them.
+    X = np.where(np.isfinite(X), X, 0)
+    C = np.where(np.isfinite(C), C, 0)
+    rng = np.random.default_rng(seed)
+    k = min(m, max(2, round(frac * m)))
+
+    def evidence(idx):
+        q, c = X[:, idx], C[:, idx]
+        q_valid = query_finite & (np.ptp(q, axis=1) > 1e-12)
+        c_valid = ref_finite & (np.ptp(c, axis=1) > 1e-12)
+        corr = _pearson(q, c)
+        corr[:, ~c_valid] = -np.inf
+        best = corr.max(axis=1)
+        # An exact/near correlation tie is not evidence for the first type.
+        unique = np.isclose(corr, best[:, None], rtol=1e-9, atol=1e-12).sum(axis=1) == 1
+        supported = q_valid & np.isfinite(best) & (best > 0) & unique
+        return corr, supported
 
     votes = np.zeros((X.shape[0], len(types)), dtype=np.int32)
     for _ in range(n_bootstrap):
-        idx = rng.choice(m, size=k, replace=False)
-        win = _pearson(X[:, idx], C[:, idx]).argmax(axis=1)
-        votes[np.arange(X.shape[0]), win] += 1
+        corr, supported = evidence(rng.choice(m, size=k, replace=False))
+        rows = np.flatnonzero(supported)
+        win = corr[rows].argmax(axis=1)
+        votes[rows, win] += 1
 
     assigned = votes.argmax(axis=1)
-    confidence = votes[np.arange(X.shape[0]), assigned] / n_bootstrap
-    corr_full = _pearson(X, C)
+    winning_votes = votes[np.arange(X.shape[0]), assigned]
+    confidence = winning_votes.astype(float) / n_bootstrap
+    corr_full, full_supported = evidence(np.arange(m))
     corr_to_pred = corr_full[np.arange(X.shape[0]), assigned]
+    tied_votes = (votes == winning_votes[:, None]).sum(axis=1) != 1
+    supported = full_supported & ~tied_votes & (winning_votes > 0) & (corr_to_pred > 0)
+    predicted = types[assigned].astype(object)
+    predicted[~supported] = "unassigned"
+    confidence[~supported] = 0.0
+    corr_to_pred[~supported] = 0.0
     return pd.DataFrame(
-        {"pred": types[assigned], "confidence": confidence, "correlation": corr_to_pred},
+        {"pred": predicted, "confidence": confidence, "correlation": corr_to_pred},
         index=ad_query.obs_names,
     )
 
