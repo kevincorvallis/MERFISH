@@ -364,3 +364,14 @@ High-value additions to this scanpy Leiden/UMAP workflow, in roughly increasing 
 ## 🙏 Credits
 
 Built on [Vizgen MERSCOPE](https://vizgen.com), the [Zeisel et al.](http://mousebrain.org) scRNAseq taxonomy, [Scanpy](https://scanpy.readthedocs.io), [Clustergrammer2](https://clustergrammer.readthedocs.io), and Observable. Released under the **MIT License**.
+
+### Unsupported reference-mapping calls
+
+The bootstrap mapper returns `pred="unassigned"`, `confidence=0`, and
+`correlation=0` when a cell has no usable expression signal, non-finite marker
+values, tied reference evidence/votes, or no positive full-marker correlation.
+Constant or non-finite reference centroids cannot vote. Confidence is the
+fraction of all bootstrap draws supporting a unique call, including abstentions
+in the denominator; it is an agreement score, not a calibrated probability.
+At least two markers, a positive integer bootstrap count and `0 < frac <= 1`
+are required. These cases are covered by offline mapping tests.
